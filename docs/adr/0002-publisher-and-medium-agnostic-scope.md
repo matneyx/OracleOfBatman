@@ -1,0 +1,3 @@
+# Graph is publisher- and medium-agnostic; Marvel API is v1 seed data only
+
+Supersedes ADR-0001. The graph's real scope is any fictional character from any publisher or medium (comics, novels, webcomics, film, TV) — not just Marvel. This was forced by the Tier 4 "out-of-universe mention" interaction type, which by definition lets a Marvel character reference something outside Marvel (e.g., Gambit referencing Garfield), and that referenced entity becomes a real, traversable node rather than a flag. Marvel's public API remains the v1 bootstrap/seed data source purely because it's structured and easy to ingest, but it no longer defines a hard boundary on what can exist in the graph.
