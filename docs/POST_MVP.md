@@ -47,6 +47,17 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
   because it needs a background job/polling pattern rather than a
   blocking request, and risks exhausting Comic Vine's rate limit if a
   few concurrent cold queries hit at once.
+- Issue-cast-based bridge discovery — when examining a candidate shared
+  issue during the crawl, also pull its full `character_credits` (the
+  entire cast) to surface bridge candidates who aren't an official
+  `character_friends`/`character_enemies` entry for either seed (e.g. a
+  one-off guest star). Deferred alongside `published_at` (ADR-0010) for
+  the same reason: both require an extra `/issue/{id}/` request the MVP
+  crawl deliberately skips to stay well under Comic Vine's 200/hour limit.
+- Fetching issue `image` URLs and the Comic Vine issue page link, for
+  display alongside a Connection — same `/issue/{id}/` request the two
+  items above need; bundle all three together whenever this gets picked
+  up.
 
 ## Frontend
 

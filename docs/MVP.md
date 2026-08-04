@@ -42,30 +42,39 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    the same character/issue from both seed directions, and duplicates
    would silently break both BFS and the "one Connection per issue" rule.
 
-3. **Comic Vine API client** — character → issues, character →
-   `character_friends`/`character_enemies` (free on the same response,
-   no extra request), issue → `character_credits`. Needs rate-limit
-   handling (200 requests/resource/hour) and in-run caching so the crawl
-   never re-fetches the same issue/character twice.
+3. **Comic Vine API client** — `character → { issue_credits,
+   character_friends, character_enemies }`, all from the single
+   `/character/{id}/` response (confirmed from real sample data — no
+   separate request per field). The crawl (ticket 4) never fetches
+   `/issue/{id}/` at all; see ADR-0010 for why. Needs rate-limit handling
+   (200 requests/resource/hour) and in-run caching so the crawl never
+   re-fetches the same character twice.
 
-4. **Expanding crawl algorithm** (`OracleOfBatman.Ingest`, see ADR-0007) — for two
-   seed Characters:
-   1. Fetch each seed's own issue list; any issue in both is a same-issue
-      Connection candidate (one `Unverified` Connection per shared issue).
-   2. If none, compare each seed's `character_friends`/`character_enemies`
-      for overlap — cheap, already in hand from step 1's fetch.
-   3. If still none, expand outward bidirectionally: fetch friends'/
-      enemies' own issues and friends/enemies, checking for overlap at
-      each layer, bounded by the request/depth budget (Tiger Style's
-      fixed-loop-bound rule).
-   4. When examining a candidate shared issue, also pull its
-      `character_credits` (full cast) — surfaces extra bridge candidates
-      without extra per-character requests.
+4. **Expanding crawl algorithm** (`OracleOfBatman.Ingest`, see ADR-0007 and
+   ADR-0010 for the full detail) — for two seed Characters:
+   1. Free pre-check: is there already a path between the seeds in Neo4j?
+      If so, skip the crawl entirely.
+   2. Fetch both seeds' character records (2 requests). Any issue in both
+      seeds' `issue_credits` is a same-issue Connection candidate (one
+      `Unverified` Connection per shared issue).
+   3. If none, compare the seeds' `character_friends`/`character_enemies`
+      for overlap — free, already in hand. Fetch any shared character and
+      check their issues against both seeds'.
+   4. If still not connected, bidirectional BFS: each round, fetch one new
+      not-yet-seen friend/enemy from whichever side has the smaller
+      frontier (1 request = 1 budget unit — see ADR-0010 for why request-
+      budget and character-budget are the same number here). Check every
+      newly-fetched character's issues against **everyone discovered so
+      far on either side**, not just the two seeds, so the crawl can find
+      paths longer than 2 hops.
    Iterative, not recursive; writes discovered Characters/Connections into
-   Neo4j as it goes, stopping when the frontiers meet or the budget runs
-   out.
+   Neo4j as it goes, stopping when the seeds are connected in the
+   accumulated graph or the character budget runs out. `published_at` is
+   left null on these Connections (see ADR-0010) — no `/issue/{id}/` fetch
+   during the crawl.
 
-5. **`Ingest` CLI wiring** — `--seed <name>` (repeatable) + a budget flag,
+5. **`Ingest` CLI wiring** — `--seed <name>` (repeatable) + a budget flag
+   (max new characters to ingest this run — see ADR-0010),
    reading `COMIC_VINE_API_KEY`/Neo4j connection from env. Ties 3 and 4
    together into a runnable console app.
 
