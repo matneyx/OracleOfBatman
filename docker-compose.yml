@@ -2,7 +2,7 @@ services:
   neo4j:
     image: neo4j:5
     environment:
-      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
+      NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-changeme}
     ports:
       - "7474:7474" # browser UI
       - "7687:7687" # bolt
