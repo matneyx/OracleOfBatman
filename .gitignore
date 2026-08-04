@@ -1,12 +1,8 @@
-# Rust
-/target
-crates/*/target
-**/*.rs.bk
+# .NET
+bin/
+obj/
+*.user
 
-# Node / frontend
-frontend/node_modules
-frontend/dist
-frontend/.vite
 
 # Env / secrets
 .env

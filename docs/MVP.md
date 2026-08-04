@@ -19,14 +19,16 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
 
 ## Tickets, in dependency order
 
-0. **Acceptance scenario** (done) — `crates/e2e/tests/features/batman_number.feature`
-   is the Jim Hammond / Jeff the Shark scenario, written before any of the
-   code that makes it pass (outside-in BDD, see ADR-0006). It's expected to
-   fail via `todo!()` panics until tickets 1–7 are done — that's the point,
-   not a bug. Each remaining ticket should turn one or more `todo!()` step
-   stubs into real implementations.
+0. **Acceptance scenario** — the Jim Hammond / Jeff the Shark scenario,
+   written before any of the code that makes it pass (outside-in), as a
+   plain xUnit/NUnit test using `CONTEXT.md`'s vocabulary (see ADR-0009 —
+   the outer BDD tool ADR-0006 specified doesn't carry over to .NET as-is;
+   choosing a replacement is deferred). Expected to fail via
+   `NotImplementedException` until tickets 1–7 are done — that's the point,
+   not a bug. Each remaining ticket should turn one or more stubs into real
+   implementations.
 
-1. **Domain types** (`crates/domain`) — `Character` (id, name,
+1. **Domain types** (`OracleOfBatman.Domain`) — `Character` (id, name,
    comic_vine_id), `Connection` (two character ids, at most one
    comic_issue_id, an Interaction Tier, a Confidence — MVP only ever
    produces `Unverified`, see ADR-0007).
@@ -46,7 +48,7 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    handling (200 requests/resource/hour) and in-run caching so the crawl
    never re-fetches the same issue/character twice.
 
-4. **Expanding crawl algorithm** (`crates/ingest`, see ADR-0007) — for two
+4. **Expanding crawl algorithm** (`OracleOfBatman.Ingest`, see ADR-0007) — for two
    seed Characters:
    1. Fetch each seed's own issue list; any issue in both is a same-issue
       Connection candidate (one `Unverified` Connection per shared issue).
@@ -63,25 +65,26 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    Neo4j as it goes, stopping when the frontiers meet or the budget runs
    out.
 
-5. **`ingest` CLI wiring** — `--seed <name>` (repeatable) + a budget flag,
+5. **`Ingest` CLI wiring** — `--seed <name>` (repeatable) + a budget flag,
    reading `COMIC_VINE_API_KEY`/Neo4j connection from env. Ties 3 and 4
-   together into a runnable binary.
+   together into a runnable console app.
 
-6. **API: character search** — `GET /characters/search?q=`, substring
-   match against what's in Neo4j, lets the frontend resolve typed text to a
-   character id.
+6. **Character search service** — substring match against what's in Neo4j,
+   lets the UI resolve typed text to a character id. Called in-process from
+   `OracleOfBatman.Web` (Blazor Server has no separate API tier to expose
+   this over HTTP as its own endpoint — see ADR-0009).
 
-7. **API: path endpoint** — `GET /path?from=<id>&to=<id>`, bounded BFS over
-   whatever's cached in Neo4j, returns the path + Batman Number, or a
-   "not enough data yet" response for an unseeded pair. Own max-depth bound,
-   independent of the crawl's.
+7. **Path service** — bounded BFS over whatever's cached in Neo4j, returns
+   the path + Batman Number, or a "not enough data yet" result for an
+   unseeded pair. Own max-depth bound, independent of the crawl's. Also
+   in-process, called directly from `OracleOfBatman.Web`.
 
-8. **Frontend: search UI** — two autocomplete character inputs (backed by
-   ticket 6's search endpoint), submit, call the path endpoint, render the
+8. **Web UI: search page** — two autocomplete character inputs (backed by
+   ticket 6's search service), submit, call the path service, render the
    path as a plain list or the "not enough data" state. No filters, no
    node-diagram visualization — that's the full vision in `docs/UI.md`,
    deliberately deferred past MVP.
 
 9. **End-to-end smoke test** —
-   `docker compose --profile ingestion run --rm ingest --seed "Jim Hammond" --seed "Jeff the Shark"`,
-   then confirm the frontend finds the path.
+   `dotnet run --project src/OracleOfBatman.Ingest -- --seed "Jim Hammond" --seed "Jeff the Shark"`,
+   then confirm the web app finds the path.

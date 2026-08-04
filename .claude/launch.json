@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "frontend-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--host"],
-      "port": 5173
+      "name": "web-dev",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["watch", "--project", "src/OracleOfBatman.Web", "run", "--launch-profile", "http"],
+      "port": 5204
     }
   ]
 }

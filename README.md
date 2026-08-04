@@ -15,22 +15,22 @@ yet scheduled.
 
 ## Stack
 
-- **Database**: Neo4j (graph)
-- **Backend**: Rust, [Axum](https://github.com/tokio-rs/axum), [neo4rs](https://github.com/neo4j-labs/neo4rs)
-- **Frontend**: React + [HeroUI](https://heroui.com), built with Vite
-- **Ingestion**: a Rust CLI (`crates/ingest`) that seeds the graph from the
-  [Comic Vine API](https://comicvine.gamespot.com/api/), run on demand, not continuously
-- Everything runs in Docker; production hosting target is intentionally
-  undecided (config lives in env vars, not provider-specific files)
+- **Database**: Neo4j (graph), run via Docker
+- **Web**: .NET Blazor Web App (Server interactivity) + [MudBlazor](https://mudblazor.com), [Neo4j.Driver](https://github.com/neo4j/neo4j-dotnet-driver)
+- **Ingestion**: a .NET console app (`src/OracleOfBatman.Ingest`) that seeds
+  the graph from the [Comic Vine API](https://comicvine.gamespot.com/api/),
+  run on demand, not continuously
+- Production hosting target is intentionally undecided (config lives in env
+  vars, not provider-specific files) — see [ADR-0009](./docs/adr/0009-dotnet-blazor-stack-pivot.md)
+  for why the stack moved off Rust/React/Docker-for-everything.
 
 ## Repo layout
 
 ```
-crates/
-  domain/   — shared types (Character, Connection, Interaction Tier, ...)
-  api/      — Axum HTTP API
-  ingest/   — one-off/occasional Comic Vine API → Neo4j ingestion CLI
-frontend/   — Vite + React + HeroUI SPA
+src/
+  OracleOfBatman.Domain/  — shared types (Character, Connection, Interaction Tier, ...)
+  OracleOfBatman.Web/     — Blazor Web App + MudBlazor, calls Neo4j directly (no separate API tier)
+  OracleOfBatman.Ingest/  — one-off/occasional Comic Vine API → Neo4j ingestion console app
 docs/adr/   — architecture decision records
 ```
 
@@ -38,19 +38,15 @@ docs/adr/   — architecture decision records
 
 ```
 cp .env.example .env   # fill in your Comic Vine API key if you're running ingest
-docker compose up
+docker compose up -d   # Neo4j only
+dotnet watch --project src/OracleOfBatman.Web run
 ```
 
-- Frontend (dev, hot reload): http://localhost:5173
-- API: http://localhost:8080
+- Web app (dev, hot reload): http://localhost:5204
 - Neo4j Browser: http://localhost:7474
 
-To run the ingestion CLI (not started by default):
+To run the ingestion console app (not started by default):
 
 ```
-docker compose --profile ingestion run --rm ingest
+dotnet run --project src/OracleOfBatman.Ingest
 ```
-
-`docker-compose.yml` is the production-shaped base (built images, no source
-mounts); `docker-compose.override.yml` is merged in automatically for local
-dev (source-mounted, hot-reloading).

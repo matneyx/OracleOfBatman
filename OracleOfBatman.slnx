@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OracleOfBatman.Domain/OracleOfBatman.Domain.csproj" />
+    <Project Path="src/OracleOfBatman.Ingest/OracleOfBatman.Ingest.csproj" />
+    <Project Path="src/OracleOfBatman.Web/OracleOfBatman.Web.csproj" />
+  </Folder>
+</Solution>
