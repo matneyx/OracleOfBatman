@@ -153,6 +153,35 @@ public class ConnectionCrawlerTests
     }
 
     [Fact]
+    public async Task ConnectsToACharacterFromAnEarlierUnrelatedCrawl_NotJustThisRunsDiscoveries()
+    {
+        const int fromA = 10;
+        const int earlierRunCharacter = 999;
+        var characters = new Dictionary<int, ComicVineCharacter>
+        {
+            [SeedA] = Character(SeedA, "A", friends: [fromA], issues: [111]),
+            [SeedB] = Character(SeedB, "B", issues: [222]),
+            // Shares an issue with earlierRunCharacter, who this crawl never fetches — only
+            // reachable via the graph-wide overlap check (ADR-0012), not an in-run dictionary.
+            [fromA] = Character(fromA, "FromA", issues: [555]),
+        };
+        var graphStore = new FakeGraphStore();
+        // Simulates a character already persisted by some earlier, unrelated crawl.
+        await graphStore.UpsertCharacterAsync(new(earlierRunCharacter, "EarlierRunCharacter"));
+        await graphStore.UpsertCharacterIssueCreditsAsync(earlierRunCharacter, [555]);
+        var characterSource = new FakeComicVineCharacterSource(characters);
+        var crawler = new ConnectionCrawler(characterSource, graphStore);
+
+        await crawler.PopulateConnectionsAsync(SeedA, SeedB, budget: 1);
+
+        Assert.DoesNotContain(earlierRunCharacter, characterSource.FetchedIds);
+        Assert.Contains(graphStore.Connections, c =>
+            c.ComicIssueId == 555 &&
+            (c.SourceCharacterComicVineId == fromA || c.TargetCharacterComicVineId == fromA) &&
+            (c.SourceCharacterComicVineId == earlierRunCharacter || c.TargetCharacterComicVineId == earlierRunCharacter));
+    }
+
+    [Fact]
     public async Task NeverFetchesTheSameCharacterTwiceEvenIfReachableFromBothSides()
     {
         const int mutualFriend = 30;

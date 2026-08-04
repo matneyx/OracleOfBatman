@@ -1,4 +1,5 @@
 using Neo4j.Driver;
+using OracleOfBatman.Graph;
 using OracleOfBatman.Ingest;
 using OracleOfBatman.Ingest.ComicVine;
 

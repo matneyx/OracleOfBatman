@@ -1,14 +1,15 @@
 namespace OracleOfBatman.Domain;
 
 /// <summary>
-/// Ordered weakest (0) to strongest (4) so "strongest tier wins" (ADR-0007) is a Math.Max
+/// Ordered weakest (0) to strongest (5) so "strongest tier wins" (ADR-0007) is a Math.Max
 /// over ordinal values, not a separate lookup table.
 /// </summary>
 public enum InteractionTier
 {
     SharedIdentity = 0,
-    MetaMention = 1,
-    InUniverseMention = 2,
-    SharedScene = 3,
-    DirectInteraction = 4,
+    SameIssue = 1,
+    MetaMention = 2,
+    InUniverseMention = 3,
+    SharedScene = 4,
+    DirectInteraction = 5,
 }

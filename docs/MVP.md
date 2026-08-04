@@ -14,10 +14,11 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
 - No Mantle/Portrayal/Universe modeling — Character maps 1:1 to a Comic Vine
   entry. That machinery exists to collapse a Character across continuities;
   with one data source there's no second continuity to collapse yet.
-- No multi-tier Interaction Tiers — every co-appearance is one undifferentiated
-  `Connection` edge. Comic Vine can't distinguish Direct Interaction from a
-  Meta Mention anyway; the tier/strongest-wins logic has nothing to do until
-  there's manually curated richer data.
+- No multi-tier Interaction Tiers — every co-appearance is one `Same Issue`
+  Connection (see ADR-0011), never promoted to a more specific tier. Comic
+  Vine can't distinguish Direct Interaction from a Meta Mention anyway; the
+  tier/strongest-wins logic has nothing to do until there's manually
+  curated richer data.
 - No live/on-demand crawling — only characters seeded via `ingest` are
   queryable (see ADR-0005).
 
@@ -59,8 +60,8 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    1. Free pre-check: is there already a path between the seeds in Neo4j?
       If so, skip the crawl entirely.
    2. Fetch both seeds' character records (2 requests). Any issue in both
-      seeds' `issue_credits` is a same-issue Connection candidate (one
-      `Unverified` Connection per shared issue).
+      seeds' `issue_credits` is a Same Issue Connection candidate (one
+      `Unverified` Connection per shared issue — see ADR-0011).
    3. If none, compare the seeds' `character_friends`/`character_enemies`
       for overlap — free, already in hand. Fetch any shared character and
       check their issues against both seeds'.
@@ -89,10 +90,18 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    `OracleOfBatman.Web` (Blazor Server has no separate API tier to expose
    this over HTTP as its own endpoint — see ADR-0009).
 
-7. **Path service** — bounded BFS over whatever's cached in Neo4j, returns
-   the path + Batman Number, or a "not enough data yet" result for an
-   unseeded pair. Own max-depth bound, independent of the crawl's. Also
-   in-process, called directly from `OracleOfBatman.Web`.
+7. **Path service** (see ADR-0011 for the full detail) —
+   `IGraphStore.FindShortestPathAsync(characterAId, characterBId, maxDepth)`
+   in the new `OracleOfBatman.Graph` project (moved out of `Ingest` so
+   `Web` doesn't have to depend on a console ingestion tool). Bounded BFS
+   over whatever's cached in Neo4j, own max-depth bound independent of the
+   crawl's. Returns a `Path?` — `Path(Characters, Hops)`, where each `Hop`
+   carries one representative Connection (the pair's existing
+   strongest-tier/earliest-date default) normalized to walk order; `null`
+   covers every "not enough data yet" case (unseeded character, or no path
+   within `maxDepth`) undifferentiated. `BatmanNumber` is `Hops.Count`,
+   computed rather than stored. Also in-process, called directly from
+   `OracleOfBatman.Web`.
 
 8. **Web UI: search page** — two autocomplete character inputs (backed by
    ticket 6's search service), submit, call the path service, render the

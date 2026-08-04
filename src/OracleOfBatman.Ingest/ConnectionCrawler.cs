@@ -1,4 +1,5 @@
 using OracleOfBatman.Domain;
+using OracleOfBatman.Graph;
 using OracleOfBatman.Ingest.ComicVine;
 
 namespace OracleOfBatman.Ingest;
@@ -8,12 +9,12 @@ public sealed record CrawlResult(bool Connected, int CharactersFetched);
 /// <summary>
 /// Implements ADR-0010's bidirectional friend/enemy-BFS crawl: free existing-path pre-check,
 /// then direct issue/friend-enemy overlap checks, then budget-bounded bidirectional BFS
-/// (smaller-frontier-first) that checks every newly-fetched character against the full
-/// accumulated set, not just the two seeds.
+/// (smaller-frontier-first). Overlap checks go through the graph itself (ADR-0012), covering
+/// every character ever persisted — not just ones discovered in this run.
 /// </summary>
 public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource, IGraphStore graphStore)
 {
-    private readonly Dictionary<int, ComicVineCharacter> _known = [];
+    private readonly HashSet<int> _visited = [];
     private readonly Queue<int> _frontierA = [];
     private readonly Queue<int> _frontierB = [];
 
@@ -49,7 +50,7 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
                 return new CrawlResult(Connected: false, CharactersFetched: fetched);
             }
 
-            if (_known.ContainsKey(candidateId))
+            if (_visited.Contains(candidateId))
             {
                 continue;
             }
@@ -64,7 +65,7 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
         }
 
         // Bidirectional BFS: expand whichever frontier is smaller, one new character at a
-        // time, checking each against everyone discovered so far (not just the seeds).
+        // time.
         while (fetched < budget && (_frontierA.Count > 0 || _frontierB.Count > 0))
         {
             var side = ChooseSideToExpand();
@@ -114,7 +115,7 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
         while (frontier.Count > 0)
         {
             var candidateId = frontier.Dequeue();
-            if (!_known.ContainsKey(candidateId))
+            if (!_visited.Contains(candidateId))
             {
                 return candidateId;
             }
@@ -137,37 +138,32 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
     private async Task<ComicVineCharacter> FetchAndRecordAsync(int comicVineId)
     {
         var character = await characterSource.GetCharacterAsync(comicVineId);
-        _known[comicVineId] = character;
+        _visited.Add(comicVineId);
 
         await graphStore.UpsertCharacterAsync(character.ToDomain());
-        await CheckOverlapsAgainstKnownAsync(character);
 
-        return character;
-    }
+        var issueCreditIds = character.IssueCredits.Select(i => i.Id).ToList();
+        await graphStore.UpsertCharacterIssueCreditsAsync(comicVineId, issueCreditIds);
 
-    private async Task CheckOverlapsAgainstKnownAsync(ComicVineCharacter newCharacter)
-    {
-        foreach (var (existingId, existingCharacter) in _known)
+        // Checks the WHOLE persisted graph, not just this run's discoveries (ADR-0012) — a
+        // character found by some earlier, unrelated crawl still gets connected here if their
+        // issue lists overlap.
+        var overlaps = await graphStore.FindOverlappingIssuesAsync(comicVineId, issueCreditIds);
+        foreach (var (otherId, sharedIssueIds) in overlaps)
         {
-            if (existingId == newCharacter.Id)
-            {
-                continue;
-            }
-
-            var sharedIssueIds = newCharacter.IssueCredits.Select(i => i.Id)
-                .Intersect(existingCharacter.IssueCredits.Select(i => i.Id));
-
             foreach (var issueId in sharedIssueIds)
             {
                 var connection = new Connection(
-                    newCharacter.Id,
-                    existingId,
+                    comicVineId,
+                    otherId,
                     issueId,
                     ComicIssuePublishedAt: null,
-                    InteractionTier.SharedScene,
+                    InteractionTier.SameIssue,
                     Confidence.Unverified);
                 await graphStore.UpsertConnectionAsync(connection);
             }
         }
+
+        return character;
     }
 }

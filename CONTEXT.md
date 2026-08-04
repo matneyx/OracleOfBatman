@@ -28,12 +28,20 @@ _Avoid_: Series, publication, book
 A single recorded interaction between two Characters, carrying exactly one Interaction Tier and referencing at most one comic issue (a Shared Identity Connection references none). A Character pair can have many Connections — Batman and the Joker plausibly have hundreds, one per issue they've shared — used together to compute shortest paths between Characters.
 _Avoid_: Edge, relationship, link (these are fine in implementation, but "Connection" is the domain term)
 
+**Path**:
+The ordered sequence of Hops between two queried Characters — what a Batman Number is the length of. Computed by a path query over whatever's already in Neo4j; not itself stored.
+_Avoid_: Chain, route
+
+**Hop**:
+One step of a Path: two adjacent Characters plus the single representative Connection between them (the Character pair's default Connection — strongest Interaction Tier, tie-broken by earliest date).
+_Avoid_: Edge, step (fine in implementation; "Hop" is the domain term for a Path's unit)
+
 **Interaction Tier**:
-The strength/nature of a Connection, one of (strongest to weakest): Direct Interaction, Shared Scene, In-Universe Mention, Meta Mention, Shared Identity.
+The strength/nature of a Connection, one of (strongest to weakest): Direct Interaction, Shared Scene, In-Universe Mention, Meta Mention, Same Issue, Shared Identity.
 _Avoid_: Link type, crossover type
 
 **Confidence**:
-Whether a Connection's Interaction Tier has been confirmed by a human (**Verified**) or is a raw, unconfirmed same-issue co-occurrence produced by ingestion (**Unverified**). Ingestion can only ever produce Unverified Connections — knowing two Characters share an issue doesn't tell you whether they actually interacted, shared a scene, or just shared a cover.
+Whether a Connection's Interaction Tier has been confirmed by a human (**Verified**) or is a raw **Same Issue** Connection produced by ingestion (**Unverified**). Ingestion can only ever produce Unverified Connections — knowing two Characters share an issue doesn't tell you whether they actually interacted, shared a scene, or just shared a cover.
 _Avoid_: Canonicity, trust level
 
 **Canonicity**:
@@ -51,6 +59,10 @@ One Character is referenced by name within the story world by another, without b
 
 **Meta Mention**:
 One Character breaks the fourth wall to reference something/someone entirely outside their own Universe (e.g., a different franchise, or the real world). Directional; the referenced entity becomes its own Character node rather than a flag (see ADR-0002).
+
+**Same Issue**:
+Two Characters are both credited on the same comic issue, with no confirmation they ever shared a scene or even a story within it — an issue can bundle several unrelated stories (e.g. an anthology/Infinity Comic issue). This is the raw signal ingestion actually produces, always paired with **Unverified** Confidence, pending a human either confirming a stronger tier or downgrading it (see `docs/POST_MVP.md`'s curation UI). Symmetric.
+_Avoid_: Shared issue, co-occurrence
 
 **Shared Identity**:
 Exists automatically between any two Portrayals of the same Character, with no story ever having connected them (e.g., DC's and Marvel's independent takes on Frankenstein's Monster, or two unrelated fictionalizations of a real president). Symmetric; the weakest tier, since it requires no authorial act, just shared canonical identity. A possible future refinement is collapsing same-Character Portrayals into one node instead of linking them this way — deferred for now.

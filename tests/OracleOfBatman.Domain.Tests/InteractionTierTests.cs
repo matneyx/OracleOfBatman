@@ -10,6 +10,8 @@ public class InteractionTierTests
     [InlineData(InteractionTier.InUniverseMention, InteractionTier.SharedScene, InteractionTier.SharedScene)]
     [InlineData(InteractionTier.DirectInteraction, InteractionTier.SharedIdentity, InteractionTier.DirectInteraction)]
     [InlineData(InteractionTier.DirectInteraction, InteractionTier.DirectInteraction, InteractionTier.DirectInteraction)]
+    [InlineData(InteractionTier.SharedIdentity, InteractionTier.SameIssue, InteractionTier.SameIssue)]
+    [InlineData(InteractionTier.SameIssue, InteractionTier.SharedScene, InteractionTier.SharedScene)]
     public void StrongestTierWins_ViaOrdinalMax(InteractionTier a, InteractionTier b, InteractionTier expectedStrongest)
     {
         var strongest = (InteractionTier)Math.Max((int)a, (int)b);
@@ -23,6 +25,7 @@ public class InteractionTierTests
         InteractionTier[] weakestToStrongest =
         [
             InteractionTier.SharedIdentity,
+            InteractionTier.SameIssue,
             InteractionTier.MetaMention,
             InteractionTier.InUniverseMention,
             InteractionTier.SharedScene,

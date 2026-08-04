@@ -1,9 +1,10 @@
 using Neo4j.Driver;
 using OracleOfBatman.Domain;
+using OracleOfBatman.Graph;
 using Testcontainers.Neo4j;
 using Xunit;
 
-namespace OracleOfBatman.Ingest.Tests;
+namespace OracleOfBatman.Graph.Tests;
 
 /// <summary>
 /// Against a real, ephemeral Neo4j (Testcontainers), not mocked — matches ADR-0006's e2e
@@ -49,7 +50,7 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
         await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
         await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
 
-        var connection = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4), InteractionTier.SharedScene, Confidence.Unverified);
+        var connection = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4), InteractionTier.SameIssue, Confidence.Unverified);
         await writer.UpsertConnectionAsync(connection);
         await writer.UpsertConnectionAsync(connection);
 
@@ -76,7 +77,7 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
         var writer = new Neo4jGraphWriter(_driver);
         await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
         await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
-        await writer.UpsertConnectionAsync(new Connection(12605, 157242, 1101757, null, InteractionTier.SharedScene, Confidence.Unverified));
+        await writer.UpsertConnectionAsync(new Connection(12605, 157242, 1101757, null, InteractionTier.SameIssue, Confidence.Unverified));
 
         var pathExists = await writer.PathExistsAsync(12605, 157242);
 
@@ -90,8 +91,8 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
         await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
         await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
         await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
-        await writer.UpsertConnectionAsync(new Connection(12605, 125054, 111, null, InteractionTier.SharedScene, Confidence.Unverified));
-        await writer.UpsertConnectionAsync(new Connection(157242, 125054, 222, null, InteractionTier.SharedScene, Confidence.Unverified));
+        await writer.UpsertConnectionAsync(new Connection(12605, 125054, 111, null, InteractionTier.SameIssue, Confidence.Unverified));
+        await writer.UpsertConnectionAsync(new Connection(157242, 125054, 222, null, InteractionTier.SameIssue, Confidence.Unverified));
 
         var pathExists = await writer.PathExistsAsync(12605, 157242);
 

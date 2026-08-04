@@ -58,6 +58,27 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
   display alongside a Connection — same `/issue/{id}/` request the two
   items above need; bundle all three together whenever this gets picked
   up.
+- Backfill `issue_credits` (ADR-0012) for Characters ingested before that
+  fix (Jim Hammond, Jeff the Land Shark, Gwenpool, Soft Serve, Beast,
+  Bloodscream, and the rest of that crawl) — they won't be found by
+  cross-run overlap checks until re-crawled. Small, optional, not blocking.
+- "Try to find a shorter path" admin action — deliberately re-crawl an
+  already-connected pair anyway, ignoring the "stop once connected" rule
+  (ADR-0010), specifically hunting for a shorter path (ADR-0012's accepted
+  partial-graph limitation). Not scheduled.
+- Nightly refresh job — rate-limited, re-fetch every already-known
+  Character's current `issue_credits` (they may have gained new issue
+  credits since last checked), update the stored list, and re-run
+  `FindOverlappingIssuesAsync` (ADR-0012) against the whole graph to catch
+  connections that didn't exist yet at ingestion time. Builds directly on
+  ADR-0012's persisted `issue_credits` + overlap-query primitives — no new
+  Neo4j schema needed, just a scheduler. Scales linearly against Comic
+  Vine's 200/hour limit (one request per Character refreshed), so past a
+  couple hundred Characters a single nightly pass no longer fits in one
+  hour and refreshes would need to spread across a rolling window (e.g.
+  oldest-checked-first) rather than refreshing everyone every night. Not
+  scheduled — needs a job-scheduling decision (this project has no
+  scheduler yet) before it can be built.
 
 ## Frontend
 

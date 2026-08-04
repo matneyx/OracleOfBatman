@@ -14,5 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OracleOfBatman.Domain\OracleOfBatman.Domain.csproj" />
+    <ProjectReference Include="..\OracleOfBatman.Graph\OracleOfBatman.Graph.csproj" />
   </ItemGroup>
 </Project>
