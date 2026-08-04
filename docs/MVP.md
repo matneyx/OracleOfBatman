@@ -1,8 +1,12 @@
 # MVP
 
-Target query: **Jim Hammond (the original android Human Torch) → Jeff the
-Shark**. Both Marvel/same-publisher, deliberately obscure and several hops
-apart — a real test of multi-hop pathfinding, not a trivial one-degree case.
+Target query: **Soft Serve → Bloodscream** (Comic Vine ids 176719 and 15734).
+Both Marvel/same-publisher, deliberately obscure — confirmed via a real
+crawl run to be genuinely 2 hops apart (Soft Serve → Beast → Bloodscream),
+a real test of multi-hop pathfinding, not a trivial one-degree case. An
+earlier candidate pair, Jim Hammond and Jeff the Land Shark, turned out to
+already share two issues directly once actually crawled — too trivial to
+exercise the multi-hop path.
 
 Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
 [docs/adr/](./adr/) for the full vision):
@@ -19,7 +23,7 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
 
 ## Tickets, in dependency order
 
-0. **Acceptance scenario** — the Jim Hammond / Jeff the Shark scenario,
+0. **Acceptance scenario** — the Soft Serve / Bloodscream scenario,
    written before any of the code that makes it pass (outside-in), as a
    plain xUnit/NUnit test using `CONTEXT.md`'s vocabulary (see ADR-0009 —
    the outer BDD tool ADR-0006 specified doesn't carry over to .NET as-is;
@@ -73,10 +77,12 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    left null on these Connections (see ADR-0010) — no `/issue/{id}/` fetch
    during the crawl.
 
-5. **`Ingest` CLI wiring** — `--seed <name>` (repeatable) + a budget flag
-   (max new characters to ingest this run — see ADR-0010),
-   reading `COMIC_VINE_API_KEY`/Neo4j connection from env. Ties 3 and 4
-   together into a runnable console app.
+5. **`Ingest` CLI wiring** (done) — `--seed-id <comicVineId>` (repeatable,
+   exactly 2) + `--budget <n>` (max new characters to ingest this run —
+   see ADR-0010), reading `COMIC_VINE_API_KEY`/Neo4j connection from env.
+   Ties 3 and 4 together into a runnable console app. Name-based lookup
+   (`--seed <name>`, needing Comic Vine's own search API) is a deferred
+   follow-up — IDs are known upfront for MVP's target query.
 
 6. **Character search service** — substring match against what's in Neo4j,
    lets the UI resolve typed text to a character id. Called in-process from
@@ -95,5 +101,5 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    deliberately deferred past MVP.
 
 9. **End-to-end smoke test** —
-   `dotnet run --project src/OracleOfBatman.Ingest -- --seed "Jim Hammond" --seed "Jeff the Shark"`,
-   then confirm the web app finds the path.
+   `dotnet run --project src/OracleOfBatman.Ingest -- --seed-id 176719 --seed-id 15734 --budget 50`,
+   then confirm the web app finds the Soft Serve → Beast → Bloodscream path.

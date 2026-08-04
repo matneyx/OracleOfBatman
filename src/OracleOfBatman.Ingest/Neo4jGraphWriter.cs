@@ -9,7 +9,7 @@ namespace OracleOfBatman.Ingest;
 /// (:Character {comic_vine_id, name})-[:CONNECTION {comic_issue_id, tier, confidence, published_at}]->(:Character)
 /// Caller owns the driver's lifetime — this does not dispose it.
 /// </summary>
-public sealed class Neo4jGraphWriter(IDriver driver, string? database = null)
+public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : IGraphStore
 {
     private void ConfigureSession(SessionConfigBuilder builder)
     {
@@ -17,6 +17,25 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null)
         {
             builder.WithDatabase(database);
         }
+    }
+
+    public async Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId)
+    {
+        await using var session = driver.AsyncSession(ConfigureSession);
+        return await session.ExecuteReadAsync(async tx =>
+        {
+            // Undirected: Batman Number pathfinding cares whether any path exists, not the
+            // stored relationship direction (which reflects discovery order, not semantics).
+            var cursor = await tx.RunAsync(
+                """
+                MATCH (a:Character {comic_vine_id: $aId})
+                MATCH (b:Character {comic_vine_id: $bId})
+                RETURN EXISTS { (a)-[:CONNECTION*]-(b) } AS pathExists
+                """,
+                new { aId = characterAComicVineId, bId = characterBComicVineId });
+            var records = await cursor.ToListAsync();
+            return records.Count > 0 && records[0]["pathExists"].As<bool>();
+        });
     }
 
     public async Task UpsertCharacterAsync(Character character)

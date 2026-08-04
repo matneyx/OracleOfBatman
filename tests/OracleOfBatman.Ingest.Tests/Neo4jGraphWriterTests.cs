@@ -57,4 +57,55 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
         Assert.Equal(2, characterCount);
         Assert.Equal(1, connectionCount);
     }
+
+    [Fact]
+    public async Task PathExists_FalseWhenCharactersAreUnconnected()
+    {
+        var writer = new Neo4jGraphWriter(_driver);
+        await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+        await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
+
+        var pathExists = await writer.PathExistsAsync(12605, 157242);
+
+        Assert.False(pathExists);
+    }
+
+    [Fact]
+    public async Task PathExists_TrueViaDirectConnection()
+    {
+        var writer = new Neo4jGraphWriter(_driver);
+        await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+        await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
+        await writer.UpsertConnectionAsync(new Connection(12605, 157242, 1101757, null, InteractionTier.SharedScene, Confidence.Unverified));
+
+        var pathExists = await writer.PathExistsAsync(12605, 157242);
+
+        Assert.True(pathExists);
+    }
+
+    [Fact]
+    public async Task PathExists_TrueViaMultiHopConnectionRegardlessOfRelationshipDirection()
+    {
+        var writer = new Neo4jGraphWriter(_driver);
+        await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+        await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
+        await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
+        await writer.UpsertConnectionAsync(new Connection(12605, 125054, 111, null, InteractionTier.SharedScene, Confidence.Unverified));
+        await writer.UpsertConnectionAsync(new Connection(157242, 125054, 222, null, InteractionTier.SharedScene, Confidence.Unverified));
+
+        var pathExists = await writer.PathExistsAsync(12605, 157242);
+
+        Assert.True(pathExists);
+    }
+
+    [Fact]
+    public async Task PathExists_FalseWhenEitherCharacterIsNotYetInTheGraph()
+    {
+        var writer = new Neo4jGraphWriter(_driver);
+        await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+
+        var pathExists = await writer.PathExistsAsync(12605, 157242);
+
+        Assert.False(pathExists);
+    }
 }
