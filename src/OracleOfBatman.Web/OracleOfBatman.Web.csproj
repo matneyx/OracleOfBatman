@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="MudBlazor" Version="8.*" />
+    <PackageReference Include="Neo4j.Driver" Version="6.3.0" />
   </ItemGroup>
 
 

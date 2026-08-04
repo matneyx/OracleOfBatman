@@ -28,4 +28,16 @@ public class HopTests
 
         Assert.NotEqual(forward, backward);
     }
+
+    [Fact]
+    public void ComicIssueNameAndSiteDetailUrl_CanBeSet()
+    {
+        var softServe = new Character(176719, "Soft Serve");
+        var beast = new Character(15694, "Beast");
+
+        var hop = new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified, "Some Issue", "https://comicvine.gamespot.com/some-issue/4000-111/");
+
+        Assert.Equal("Some Issue", hop.ComicIssueName);
+        Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-111/", hop.ComicIssueSiteDetailUrl);
+    }
 }

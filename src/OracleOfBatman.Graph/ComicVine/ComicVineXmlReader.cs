@@ -1,11 +1,12 @@
 using System.Xml.Serialization;
 
-namespace OracleOfBatman.Ingest.ComicVine;
+namespace OracleOfBatman.Graph.ComicVine;
 
 public static class ComicVineXmlReader
 {
     private static readonly XmlSerializer CharacterSerializer = new(typeof(ComicVineCharacterEnvelope));
     private static readonly XmlSerializer IssueSerializer = new(typeof(ComicVineIssueEnvelope));
+    private static readonly XmlSerializer SearchSerializer = new(typeof(ComicVineSearchEnvelope));
 
     public static ComicVineCharacter ReadCharacter(string filePath)
     {
@@ -28,6 +29,12 @@ public static class ComicVineXmlReader
     public static ComicVineIssue ReadIssue(Stream xml)
     {
         var envelope = (ComicVineIssueEnvelope)IssueSerializer.Deserialize(xml)!;
+        return envelope.Results;
+    }
+
+    public static IReadOnlyList<ComicVineSearchCharacterResult> ReadSearchResults(Stream xml)
+    {
+        var envelope = (ComicVineSearchEnvelope)SearchSerializer.Deserialize(xml)!;
         return envelope.Results;
     }
 }

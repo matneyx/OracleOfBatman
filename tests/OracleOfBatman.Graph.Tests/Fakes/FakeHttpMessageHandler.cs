@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace OracleOfBatman.Ingest.Tests.Fakes;
+namespace OracleOfBatman.Graph.Tests.Fakes;
 
 public sealed class FakeHttpMessageHandler(HttpStatusCode statusCode, string content, Action<HttpRequestMessage>? onRequest = null) : HttpMessageHandler
 {

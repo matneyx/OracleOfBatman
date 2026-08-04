@@ -1,6 +1,6 @@
-using OracleOfBatman.Ingest.ComicVine;
+using OracleOfBatman.Graph.ComicVine;
 
-namespace OracleOfBatman.Ingest.Tests.Fakes;
+namespace OracleOfBatman.Graph.Tests.Fakes;
 
 /// <summary>In-memory IComicVineCharacterSource backed by a hand-built character graph, so
 /// ConnectionCrawler tests don't depend on real HTTP or the large real sample files.</summary>

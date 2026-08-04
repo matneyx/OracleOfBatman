@@ -80,4 +80,16 @@ public sealed class CharacterSearchTests : IAsyncLifetime
 
         Assert.Equal(["Amazing Spider", "Ziggy Spider"], results.Select(c => c.Name));
     }
+
+    [Fact]
+    public async Task SearchCharacters_ReturnsImageUrlAndSiteDetailUrl()
+    {
+        await _writer.UpsertCharacterAsync(new Character(176719, "Soft Serve", "https://example.com/soft-serve-icon.jpg", "https://comicvine.gamespot.com/soft-serve/4005-176719/"));
+
+        var results = await _writer.SearchCharactersAsync("soft");
+
+        var match = Assert.Single(results);
+        Assert.Equal("https://example.com/soft-serve-icon.jpg", match.ImageUrl);
+        Assert.Equal("https://comicvine.gamespot.com/soft-serve/4005-176719/", match.SiteDetailUrl);
+    }
 }

@@ -1,6 +1,340 @@
 @page "/"
+@using OracleOfBatman.Domain
+@using OracleOfBatman.Graph
+@using OracleOfBatman.Graph.ComicVine
+@inject IGraphStore GraphStore
+@inject IServiceProvider ServiceProvider
+@inject ISnackbar Snackbar
 
 <PageTitle>Oracle of Batman</PageTitle>
 
 <MudText Typo="Typo.h3" GutterBottom="true">Oracle of Batman</MudText>
-<MudText>Search UI goes here — see docs/MVP.md ticket 8.</MudText>
+<MudText Class="mb-4">Find the shortest path of Connections between two Characters.</MudText>
+
+<MudGrid>
+    <MudItem xs="12" sm="5">
+        <MudAutocomplete T="Character" Label="Character A" @bind-Value="_characterA"
+                          SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
+                          Clearable="true" ResetValueOnEmptyText="true" />
+    </MudItem>
+    <MudItem xs="12" sm="5">
+        <MudAutocomplete T="Character" Label="Character B" @bind-Value="_characterB"
+                          SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
+                          Clearable="true" ResetValueOnEmptyText="true" />
+    </MudItem>
+    <MudItem xs="12" sm="2" Class="d-flex align-center">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   Disabled="@(_characterA is null || _characterB is null)"
+                   OnClick="FindPathAsync">
+            Go
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+@if (_comicVineSearchSource is not null)
+{
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.subtitle1" Class="mb-2">Can't find a character above? Search Comic Vine directly:</MudText>
+    <MudGrid>
+        <MudItem xs="12" sm="9">
+            <MudTextField @bind-Value="_comicVineQuery" Label="Search Comic Vine" Immediate="true" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudButton Variant="Variant.Outlined" FullWidth="true" OnClick="SearchComicVineAsync"
+                       Disabled="@(string.IsNullOrWhiteSpace(_comicVineQuery) || _comicVineSearching)">
+                Search
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_comicVineSearching)
+    {
+        <MudProgressLinear Indeterminate="true" Class="my-2" />
+    }
+    else if (_comicVineResults is { Count: > 0 })
+    {
+        @foreach (var result in _comicVineResults)
+        {
+            <MudPaper Class="pa-2 mb-2 d-flex align-center ga-2" Outlined="true">
+                <MudAvatar>
+                    @if (result.Image?.IconUrl is { } resultIconUrl)
+                    {
+                        <img src="@resultIconUrl" alt="" />
+                    }
+                </MudAvatar>
+                <MudText Class="flex-grow-1">@result.Name</MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_ingesting" OnClick="@(() => UseComicVineResultAsync(result, forCharacterA: true))">Use as A</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_ingesting" OnClick="@(() => UseComicVineResultAsync(result, forCharacterA: false))">Use as B</MudButton>
+            </MudPaper>
+        }
+        @if (_ingesting)
+        {
+            <MudProgressLinear Indeterminate="true" Class="my-2" />
+        }
+    }
+    else if (_comicVineSearched)
+    {
+        <MudText Typo="Typo.body2">No Comic Vine results for "@_comicVineQuery".</MudText>
+    }
+}
+
+@if (_searched)
+{
+    <MudDivider Class="my-4" />
+
+    @if (_path is { } path)
+    {
+        <MudText Typo="Typo.h5" GutterBottom="true">Batman Number: @path.BatmanNumber</MudText>
+        @foreach (var hop in path.Hops)
+        {
+            <MudPaper Class="pa-3 mb-2 d-flex align-center flex-wrap ga-2" Outlined="true">
+                <MudAvatar>
+                    @if (hop.From.ImageUrl is { } fromImageUrl)
+                    {
+                        <img src="@fromImageUrl" alt="" />
+                    }
+                </MudAvatar>
+                @if (hop.From.SiteDetailUrl is { } fromUrl)
+                {
+                    <MudLink Href="@fromUrl" Target="_blank">@hop.From.Name&nbsp;</MudLink>
+                }
+                else
+                {
+                    <MudText>@hop.From.Name&nbsp;</MudText>
+                }
+                <MudText>was @hop.Tier.ToDisplayPhrase() in&nbsp</MudText>
+                @if (_issueThumbnails.TryGetValue(hop.ComicIssueId ?? -1, out var issueThumbnail) && issueThumbnail is not null)
+                {
+                    <MudAvatar>
+                        <img src="@issueThumbnail" alt="" />
+                    </MudAvatar>
+                }
+                @if (hop.ComicIssueSiteDetailUrl is { } issueUrl)
+                {
+                    <MudLink Href="@issueUrl" Target="_blank">&nbsp;@hop.ComicIssueName</MudLink>
+                }
+                else
+                {
+                    <MudText>@hop.ComicIssueName</MudText>
+                }
+                <MudText>&nbsp;with&nbsp;</MudText>
+                <MudAvatar>
+                    @if (hop.To.ImageUrl is { } toImageUrl)
+                    {
+                        <img src="@toImageUrl" alt="" />
+                    }
+                </MudAvatar>
+                @if (hop.To.SiteDetailUrl is { } toUrl)
+                {
+                    <MudLink Href="@toUrl" Target="_blank">&nbsp;@hop.To.Name</MudLink>
+                }
+                else
+                {
+                    <MudText>@hop.To.Name</MudText>
+                }
+            </MudPaper>
+        }
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-2">Not enough data yet for this pair.</MudAlert>
+        @if (_connectionCrawler is not null)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="TryToConnectAsync" Disabled="_connecting">
+                @(_connecting ? "Searching for a connection..." : "Try to find a connection")
+            </MudButton>
+        }
+    }
+}
+
+@code {
+    private const int MaxDepth = 6;
+    private const int ConnectBudget = 50;
+
+    private Character? _characterA;
+    private Character? _characterB;
+    private Path? _path;
+    private bool _searched;
+    private bool _connecting;
+    private bool _ingesting;
+    private readonly Dictionary<int, string?> _issueThumbnails = [];
+
+    private string _comicVineQuery = "";
+    private bool _comicVineSearching;
+    private bool _comicVineSearched;
+    private IReadOnlyList<ComicVineSearchCharacterResult>? _comicVineResults;
+
+    private IComicVineCharacterSearchSource? _comicVineSearchSource;
+    private IComicVineCharacterSource? _comicVineCharacterSource;
+    private IComicVineIssueSource? _comicVineIssueSource;
+    private ConnectionCrawler? _connectionCrawler;
+
+    protected override void OnInitialized()
+    {
+        // Only registered when COMIC_VINE_API_KEY is configured (Program.cs) — features that
+        // need it are hidden rather than erroring when it's absent.
+        _comicVineSearchSource = ServiceProvider.GetService<IComicVineCharacterSearchSource>();
+        _comicVineCharacterSource = ServiceProvider.GetService<IComicVineCharacterSource>();
+        _comicVineIssueSource = ServiceProvider.GetService<IComicVineIssueSource>();
+        _connectionCrawler = ServiceProvider.GetService<ConnectionCrawler>();
+    }
+
+    private async Task<IEnumerable<Character>> SearchCharactersAsync(string query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        return await GraphStore.SearchCharactersAsync(query);
+    }
+
+    private static string CharacterName(Character? character) => character?.Name ?? string.Empty;
+
+    private async Task FindPathAsync()
+    {
+        if (_characterA is null || _characterB is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
+            _searched = true;
+            await LoadIssueThumbnailsAsync();
+        }
+        catch (Exception ex)
+        {
+            // A dead circuit takes the whole session down with it (see the incident that
+            // motivated this) — better to surface the failure and let the user retry.
+            Snackbar.Add($"Something went wrong finding a path: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task TryToConnectAsync()
+    {
+        if (_connectionCrawler is null || _characterA is null || _characterB is null)
+        {
+            return;
+        }
+
+        _connecting = true;
+        StateHasChanged();
+        Snackbar.Add($"Searching Comic Vine for a connection between {_characterA.Name} and {_characterB.Name}…", Severity.Info);
+
+        try
+        {
+            var result = await _connectionCrawler.PopulateConnectionsAsync(_characterA.ComicVineId, _characterB.ComicVineId, ConnectBudget);
+            _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
+            await LoadIssueThumbnailsAsync();
+
+            Snackbar.Add(
+                result.Connected ? "Found a connection!" : $"No connection found after checking {result.CharactersFetched} character(s).",
+                result.Connected ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            // A dead circuit takes the whole session down with it (see the incident that
+            // motivated this) — better to surface the failure and let the user retry.
+            Snackbar.Add($"Something went wrong while searching for a connection: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _connecting = false;
+        }
+    }
+
+    private async Task LoadIssueThumbnailsAsync()
+    {
+        if (_comicVineIssueSource is null || _path is null)
+        {
+            return;
+        }
+
+        foreach (var issueId in _path.Hops.Select(h => h.ComicIssueId).Where(id => id.HasValue).Select(id => id!.Value).Distinct())
+        {
+            if (_issueThumbnails.ContainsKey(issueId))
+            {
+                continue;
+            }
+
+            var issue = await _comicVineIssueSource.GetIssueAsync(issueId);
+            _issueThumbnails[issueId] = issue.Image?.IconUrl;
+        }
+    }
+
+    private async Task SearchComicVineAsync()
+    {
+        if (_comicVineSearchSource is null || string.IsNullOrWhiteSpace(_comicVineQuery))
+        {
+            return;
+        }
+
+        _comicVineSearching = true;
+        StateHasChanged();
+
+        try
+        {
+            _comicVineResults = await _comicVineSearchSource.SearchCharactersAsync(_comicVineQuery);
+            _comicVineSearched = true;
+        }
+        catch (Exception ex)
+        {
+            // A dead circuit takes the whole session down with it (see the incident that
+            // motivated this) — better to surface the failure and let the user retry.
+            Snackbar.Add($"Something went wrong searching Comic Vine: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _comicVineSearching = false;
+        }
+    }
+
+    private async Task UseComicVineResultAsync(ComicVineSearchCharacterResult result, bool forCharacterA)
+    {
+        if (_comicVineCharacterSource is null)
+        {
+            return;
+        }
+
+        _ingesting = true;
+        StateHasChanged();
+        Snackbar.Add($"Fetching {result.Name} from Comic Vine and checking for connections — this can take a moment for prolific characters…", Severity.Info);
+
+        try
+        {
+            // Ensures the character is fully persisted and connected to the rest of the graph
+            // (ADR-0012's overlap check), not just referenced by name.
+            var ingested = _connectionCrawler is not null
+                ? await _connectionCrawler.IngestCharacterAsync(result.Id)
+                : await _comicVineCharacterSource.GetCharacterAsync(result.Id);
+            var domainCharacter = ingested.ToDomain();
+
+            if (forCharacterA)
+            {
+                _characterA = domainCharacter;
+            }
+            else
+            {
+                _characterB = domainCharacter;
+            }
+
+            _comicVineResults = null;
+            _comicVineQuery = "";
+            _comicVineSearched = false;
+            Snackbar.Add($"{domainCharacter.Name} added as Character {(forCharacterA ? "A" : "B")}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            // A dead circuit takes the whole session down with it (see the incident that
+            // motivated this) — better to surface the failure and let the user retry.
+            Snackbar.Add($"Something went wrong fetching {result.Name}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _ingesting = false;
+        }
+    }
+
+}

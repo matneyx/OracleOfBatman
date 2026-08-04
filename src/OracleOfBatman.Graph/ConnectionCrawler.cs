@@ -1,8 +1,7 @@
 using OracleOfBatman.Domain;
-using OracleOfBatman.Graph;
-using OracleOfBatman.Ingest.ComicVine;
+using OracleOfBatman.Graph.ComicVine;
 
-namespace OracleOfBatman.Ingest;
+namespace OracleOfBatman.Graph;
 
 public sealed record CrawlResult(bool Connected, int CharactersFetched);
 
@@ -12,11 +11,13 @@ public sealed record CrawlResult(bool Connected, int CharactersFetched);
 /// (smaller-frontier-first). Overlap checks go through the graph itself (ADR-0012), covering
 /// every character ever persisted — not just ones discovered in this run.
 /// </summary>
-public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource, IGraphStore graphStore)
+public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource, IComicVineIssueSource issueSource, IGraphStore graphStore)
 {
     private readonly HashSet<int> _visited = [];
     private readonly Queue<int> _frontierA = [];
     private readonly Queue<int> _frontierB = [];
+    private readonly Dictionary<int, ComicVineIssue> _issueCache = [];
+    private readonly HashSet<int> _issueLookupFailures = [];
 
     public async Task<CrawlResult> PopulateConnectionsAsync(int seedAComicVineId, int seedBComicVineId, int budget)
     {
@@ -27,8 +28,8 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
 
         // The two seed fetches aren't counted against the expansion budget — the budget is
         // for new characters discovered beyond the seeds (ADR-0010).
-        var seedA = await FetchAndRecordAsync(seedAComicVineId);
-        var seedB = await FetchAndRecordAsync(seedBComicVineId);
+        var seedA = await IngestCharacterAsync(seedAComicVineId);
+        var seedB = await IngestCharacterAsync(seedBComicVineId);
 
         if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
         {
@@ -55,7 +56,7 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
                 continue;
             }
 
-            await FetchAndRecordAsync(candidateId);
+            await IngestCharacterAsync(candidateId);
             fetched++;
 
             if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
@@ -75,7 +76,7 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
                 continue;
             }
 
-            var newCharacter = await FetchAndRecordAsync(candidateId.Value);
+            var newCharacter = await IngestCharacterAsync(candidateId.Value);
             fetched++;
             EnqueueFrontier(side == Side.A ? _frontierA : _frontierB, newCharacter);
 
@@ -135,7 +136,11 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
         }
     }
 
-    private async Task<ComicVineCharacter> FetchAndRecordAsync(int comicVineId)
+    /// <summary>Ensures a character is fully persisted (Character node + issue_credits) and
+    /// checked for overlaps against the whole graph (ADR-0012). Public because it's also
+    /// useful standalone — e.g. seeding a single character picked from a Comic Vine search
+    /// that isn't in our graph yet at all.</summary>
+    public async Task<ComicVineCharacter> IngestCharacterAsync(int comicVineId)
     {
         var character = await characterSource.GetCharacterAsync(comicVineId);
         _visited.Add(comicVineId);
@@ -153,17 +158,73 @@ public sealed class ConnectionCrawler(IComicVineCharacterSource characterSource,
         {
             foreach (var issueId in sharedIssueIds)
             {
+                // The matched issue's name/link usually come free from this character's own
+                // issue_credits — no extra Comic Vine request. Collected editions (TPBs,
+                // omnibuses) often have a blank or generic "TPB" issue name, though; the only
+                // identifying info Comic Vine gives for those is the Volume's (series) name, so
+                // that's worth the one extra request per such issue.
+                var issueRef = character.IssueCredits.First(i => i.Id == issueId);
+                var issueName = await ResolveIssueNameAsync(issueId, issueRef.Name);
                 var connection = new Connection(
                     comicVineId,
                     otherId,
                     issueId,
                     ComicIssuePublishedAt: null,
                     InteractionTier.SameIssue,
-                    Confidence.Unverified);
+                    Confidence.Unverified,
+                    issueName,
+                    issueRef.SiteDetailUrl);
                 await graphStore.UpsertConnectionAsync(connection);
             }
         }
 
         return character;
+    }
+
+    /// <summary>Enriches the issue name with its Volume (series) name when the issue's own name
+    /// is blank or the generic "TPB" — the common case for collected editions. Blank names are
+    /// replaced by the Volume name alone; "TPB" is kept alongside it ("{Volume}: TPB") since it
+    /// still carries some signal. Caches the fetched issue per crawl run since the same issue
+    /// often bridges several overlapping characters.</summary>
+    private async Task<string?> ResolveIssueNameAsync(int issueId, string? issueName)
+    {
+        if (!string.IsNullOrWhiteSpace(issueName) && !string.Equals(issueName, "TPB", StringComparison.OrdinalIgnoreCase))
+        {
+            return issueName;
+        }
+
+        if (_issueLookupFailures.Contains(issueId))
+        {
+            return issueName;
+        }
+
+        if (!_issueCache.TryGetValue(issueId, out var issue))
+        {
+            try
+            {
+                issue = await issueSource.GetIssueAsync(issueId);
+            }
+            catch (HttpRequestException)
+            {
+                // Comic Vine being unreachable or rate-limited (a real risk here — a prolific
+                // character can trigger dozens of these lookups in one ingest) must not abort
+                // the whole crawl. Fall back to the original name and don't retry this issue
+                // again this run.
+                _issueLookupFailures.Add(issueId);
+                return issueName;
+            }
+
+            _issueCache[issueId] = issue;
+        }
+
+        if (issue.Volume?.Name is not { } volumeName)
+        {
+            return issueName;
+        }
+
+        // "TPB" still carries some signal (it's not nothing), so keep it alongside the
+        // Volume rather than discarding it — but a genuinely blank issue name has nothing
+        // worth keeping, so the Volume alone is the whole answer there.
+        return string.IsNullOrWhiteSpace(issueName) ? volumeName : $"{volumeName}: {issueName}";
     }
 }

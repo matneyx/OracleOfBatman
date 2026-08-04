@@ -22,4 +22,22 @@ public class CharacterTests
 
         Assert.NotEqual(jimHammond, jeff);
     }
+
+    [Fact]
+    public void ImageUrlAndSiteDetailUrl_DefaultToNull()
+    {
+        var character = new Character(157242, "Jeff the Land Shark");
+
+        Assert.Null(character.ImageUrl);
+        Assert.Null(character.SiteDetailUrl);
+    }
+
+    [Fact]
+    public void ImageUrlAndSiteDetailUrl_CanBeSet()
+    {
+        var character = new Character(157242, "Jeff the Land Shark", "https://example.com/jeff.jpg", "https://comicvine.gamespot.com/jeff-the-land-shark/4005-157242/");
+
+        Assert.Equal("https://example.com/jeff.jpg", character.ImageUrl);
+        Assert.Equal("https://comicvine.gamespot.com/jeff-the-land-shark/4005-157242/", character.SiteDetailUrl);
+    }
 }

@@ -1,7 +1,6 @@
 using OracleOfBatman.Domain;
-using OracleOfBatman.Graph;
 
-namespace OracleOfBatman.Ingest.Tests.Fakes;
+namespace OracleOfBatman.Graph.Tests.Fakes;
 
 /// <summary>In-memory IGraphStore so ConnectionCrawler's decision logic is testable without
 /// Docker/Neo4j. Path existence is BFS over an undirected adjacency built from Connections,
@@ -103,7 +102,7 @@ public sealed class FakeGraphStore : IGraphStore
             var connection = _connections.First(c =>
                 (c.SourceCharacterComicVineId == idPath[i] && c.TargetCharacterComicVineId == idPath[i + 1]) ||
                 (c.SourceCharacterComicVineId == idPath[i + 1] && c.TargetCharacterComicVineId == idPath[i]));
-            hops.Add(new Hop(characters[i], characters[i + 1], connection.ComicIssueId, connection.Tier, connection.Confidence));
+            hops.Add(new Hop(characters[i], characters[i + 1], connection.ComicIssueId, connection.Tier, connection.Confidence, connection.ComicIssueName, connection.ComicIssueSiteDetailUrl));
         }
 
         return new Domain.Path(characters, hops);

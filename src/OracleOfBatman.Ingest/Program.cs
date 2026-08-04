@@ -1,7 +1,6 @@
 using Neo4j.Driver;
 using OracleOfBatman.Graph;
-using OracleOfBatman.Ingest;
-using OracleOfBatman.Ingest.ComicVine;
+using OracleOfBatman.Graph.ComicVine;
 
 // Runs the ADR-0010 crawl for two seed Characters, populating Neo4j with whatever
 // Characters/Connections it discovers. --seed-id takes a Comic Vine character id directly;
