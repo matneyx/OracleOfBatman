@@ -28,4 +28,9 @@ public interface IGraphStore
     Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> FindOverlappingIssuesAsync(int comicVineId, IReadOnlyList<int> issueCreditIds);
 
     Task UpsertConnectionAsync(Connection connection);
+
+    /// <summary>Case-insensitive substring match against Character names, ordered
+    /// alphabetically, bounded by limit (MVP ticket 6) — lets the UI resolve typed text to a
+    /// character id.</summary>
+    Task<IReadOnlyList<Character>> SearchCharactersAsync(string query, int limit = 20);
 }

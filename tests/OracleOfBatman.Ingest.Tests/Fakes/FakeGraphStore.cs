@@ -152,4 +152,15 @@ public sealed class FakeGraphStore : IGraphStore
 
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<Character>> SearchCharactersAsync(string query, int limit = 20)
+    {
+        var results = _characters.Values
+            .Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.Name, StringComparer.Ordinal)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<Character>>(results);
+    }
 }

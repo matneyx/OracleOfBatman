@@ -85,10 +85,13 @@ Scope cuts from the full design (see [CONTEXT.md](../CONTEXT.md) and
    (`--seed <name>`, needing Comic Vine's own search API) is a deferred
    follow-up — IDs are known upfront for MVP's target query.
 
-6. **Character search service** — substring match against what's in Neo4j,
-   lets the UI resolve typed text to a character id. Called in-process from
+6. **Character search service** (done) —
+   `IGraphStore.SearchCharactersAsync(query, limit)` in
+   `OracleOfBatman.Graph`: case-insensitive substring match against
+   Character names, alphabetical, bounded by `limit` (default 20). Lets
+   the UI resolve typed text to a character id. Not yet called from
    `OracleOfBatman.Web` (Blazor Server has no separate API tier to expose
-   this over HTTP as its own endpoint — see ADR-0009).
+   this over HTTP as its own endpoint — see ADR-0009) — that's ticket 8.
 
 7. **Path service** (see ADR-0011 for the full detail) —
    `IGraphStore.FindShortestPathAsync(characterAId, characterBId, maxDepth)`

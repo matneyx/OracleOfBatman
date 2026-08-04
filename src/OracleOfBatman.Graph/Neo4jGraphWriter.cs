@@ -169,6 +169,28 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
         });
     }
 
+    public async Task<IReadOnlyList<Character>> SearchCharactersAsync(string query, int limit = 20)
+    {
+        await using var session = driver.AsyncSession(ConfigureSession);
+        return await session.ExecuteReadAsync(async tx =>
+        {
+            var cursor = await tx.RunAsync(
+                """
+                MATCH (c:Character)
+                WHERE toLower(c.name) CONTAINS toLower($query)
+                RETURN c.comic_vine_id AS comicVineId, c.name AS name
+                ORDER BY c.name
+                LIMIT $limit
+                """,
+                new { query, limit });
+
+            var records = await cursor.ToListAsync();
+            return (IReadOnlyList<Character>)records
+                .Select(r => new Character(r["comicVineId"].As<int>(), r["name"].As<string>()))
+                .ToList();
+        });
+    }
+
     public async Task<(long CharacterCount, long ConnectionCount)> GetSummaryAsync()
     {
         await using var session = driver.AsyncSession(ConfigureSession);
