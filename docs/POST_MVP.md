@@ -58,10 +58,6 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
   display alongside a Connection — same `/issue/{id}/` request the two
   items above need; bundle all three together whenever this gets picked
   up.
-- Backfill `issue_credits` (ADR-0012) for Characters ingested before that
-  fix (Jim Hammond, Jeff the Land Shark, Gwenpool, Soft Serve, Beast,
-  Bloodscream, and the rest of that crawl) — they won't be found by
-  cross-run overlap checks until re-crawled. Small, optional, not blocking.
 - "Try to find a shorter path" admin action — deliberately re-crawl an
   already-connected pair anyway, ignoring the "stop once connected" rule
   (ADR-0010), specifically hunting for a shorter path (ADR-0012's accepted
