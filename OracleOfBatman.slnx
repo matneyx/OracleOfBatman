@@ -4,4 +4,8 @@
     <Project Path="src/OracleOfBatman.Ingest/OracleOfBatman.Ingest.csproj" />
     <Project Path="src/OracleOfBatman.Web/OracleOfBatman.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OracleOfBatman.Domain.Tests/OracleOfBatman.Domain.Tests.csproj" />
+    <Project Path="tests/OracleOfBatman.Ingest.Tests/OracleOfBatman.Ingest.Tests.csproj" />
+  </Folder>
 </Solution>

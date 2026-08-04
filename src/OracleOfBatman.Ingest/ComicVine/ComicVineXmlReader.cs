@@ -10,14 +10,24 @@ public static class ComicVineXmlReader
     public static ComicVineCharacter ReadCharacter(string filePath)
     {
         using var stream = File.OpenRead(filePath);
-        var envelope = (ComicVineCharacterEnvelope)CharacterSerializer.Deserialize(stream)!;
+        return ReadCharacter(stream);
+    }
+
+    public static ComicVineCharacter ReadCharacter(Stream xml)
+    {
+        var envelope = (ComicVineCharacterEnvelope)CharacterSerializer.Deserialize(xml)!;
         return envelope.Results;
     }
 
     public static ComicVineIssue ReadIssue(string filePath)
     {
         using var stream = File.OpenRead(filePath);
-        var envelope = (ComicVineIssueEnvelope)IssueSerializer.Deserialize(stream)!;
+        return ReadIssue(stream);
+    }
+
+    public static ComicVineIssue ReadIssue(Stream xml)
+    {
+        var envelope = (ComicVineIssueEnvelope)IssueSerializer.Deserialize(xml)!;
         return envelope.Results;
     }
 }
