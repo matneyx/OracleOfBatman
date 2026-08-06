@@ -1,0 +1,32 @@
+<MudCard>
+  <MudCardContent>
+    <MudGrid Spacing="1">
+      <MudItem sm="4">
+        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large">
+          <MudImage Src="@ImageUrl"/>
+        </MudAvatar>
+      </MudItem>
+      <MudItem sm="8">
+        @if (SiteDetailUrl is null or "")
+        {
+          <MudText Typo="Typo.h5">@Name</MudText>
+        }
+        else
+        {
+          <MudLink Href="@SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Name</MudLink>
+        }
+      </MudItem>
+    </MudGrid>
+  </MudCardContent>
+</MudCard>
+
+@code {
+  [Parameter]
+  public string? Name { get; set; }
+
+  [Parameter]
+  public string? SiteDetailUrl { get; set; }
+
+  [Parameter]
+  public string? ImageUrl { get; set; }
+}

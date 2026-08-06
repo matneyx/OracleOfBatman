@@ -43,6 +43,20 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
 
 ## Ingestion
 
+- **Model Issue (and Team) as first-class Neo4j nodes** (ADR-0013 and
+  ADR-0014, designed not yet built) — replaces pairwise per-issue
+  `CONNECTION` edges (O(N²) for an N-Character issue) with
+  `(:Character)-[:CREDITED_IN]->(:Issue)`, making a Same Issue connection a
+  structural fact (shared Issue membership) rather than a written record,
+  plus a new `(:Character)-[:MEMBER_OF]->(:Team)` for the crawl's own
+  discovery use (never a Connection/Path segment itself). Includes a
+  live-data migration plan (Issue only — Team has no existing data to
+  migrate), a Bacon-Number-style pathfinding rewrite, and an escalating
+  friends/enemies/teams-BFS-then-issue/team-cast-discovery crawl algorithm
+  (ADR-0014, supersedes the "issue-cast-based bridge discovery" idea
+  previously noted here). Not scheduled — a real chunk of work across the
+  crawl, the writer, and the path query, deliberately deferred rather than
+  rushed alongside other changes.
 - Live, *automatic* on-demand crawling on an API cache-miss (ADR-0005) —
   still deferred because it needs a background job/polling pattern rather
   than a blocking request, and risks exhausting Comic Vine's rate limit if
@@ -50,13 +64,6 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
   ("Try to find a connection" button on the search page, a blocking
   request the user explicitly opts into) is done instead — lower risk
   since it's one request at a time, not automatic.
-- Issue-cast-based bridge discovery — when examining a candidate shared
-  issue during the crawl, also pull its full `character_credits` (the
-  entire cast) to surface bridge candidates who aren't an official
-  `character_friends`/`character_enemies` entry for either seed (e.g. a
-  one-off guest star). Deferred alongside `published_at` (ADR-0010) for
-  the same reason: both require an extra `/issue/{id}/` request the MVP
-  crawl deliberately skips to stay well under Comic Vine's 200/hour limit.
 - "Try to find a shorter path" admin action — deliberately re-crawl an
   already-connected pair anyway, ignoring the "stop once connected" rule
   (ADR-0010), specifically hunting for a shorter path (ADR-0012's accepted

@@ -1,0 +1,29 @@
+@using OracleOfBatman.Domain
+<MudCard>
+  <MudCardContent>
+    <MudGrid Spacing="1">
+      <MudItem sm="4">
+        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large">
+          <MudImage Src="@Character.ImageUrl"/>
+        </MudAvatar>
+      </MudItem>
+      <MudItem sm="8">
+        @if (Character.SiteDetailUrl is null or "")
+        {
+          <MudText Typo="Typo.h5">@Character.Name</MudText>
+        }
+        else
+        {
+          <MudLink Href="@Character.SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Character.Name</MudLink>
+        }
+      </MudItem>
+    </MudGrid>
+  </MudCardContent>
+</MudCard>
+
+@code {
+
+  [Parameter, EditorRequired]
+  public required Character Character { get; set; }
+
+}

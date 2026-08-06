@@ -24,8 +24,16 @@ _Avoid_: Identity, alias, codename
 A specific ongoing publication that Issues belong to (e.g., "Mad Magazine," "Amazing Spider-Man"). Can be flagged Parody/Satire, which cascades to the Canonicity of every Connection derived from its Issues, without requiring per-Connection review.
 _Avoid_: Series, publication, book
 
+**Issue**:
+A single published comic issue, belonging to exactly one Title, crediting one or more Characters. A Same Issue Connection between two Characters is represented structurally — both Characters credited on the same Issue — rather than as its own stored record (see ADR-0013); other Interaction Tiers still reference an Issue as an explicit property of a stored Connection.
+_Avoid_: Comic, book (in this specific sense; "book" collides with Title's own avoid-list)
+
+**Team**:
+A group of Characters (e.g. the X-Men), used only as an ingestion-time discovery signal — two Characters sharing a Team membership is worth investigating further, but is never itself a Connection or a Path segment (see ADR-0014). Unlike every other term in this list, Team carries no pathfinding meaning: it never contributes to a Batman Number.
+_Avoid_: Group, roster (fine in implementation; "Team" is the domain term)
+
 **Connection**:
-A single recorded interaction between two Characters, carrying exactly one Interaction Tier and referencing at most one comic issue (a Shared Identity Connection references none). A Character pair can have many Connections — Batman and the Joker plausibly have hundreds, one per issue they've shared — used together to compute shortest paths between Characters.
+A single recorded interaction between two Characters, carrying exactly one Interaction Tier and referencing at most one comic issue (a Shared Identity Connection references none). A Character pair can have many Connections — Batman and the Joker plausibly have hundreds, one per issue they've shared — used together to compute shortest paths between Characters. "Recorded" is a domain-level claim, not necessarily an implementation one: a Same Issue Connection is inferred from two Characters' shared Issue membership rather than written as its own record (ADR-0013); every other tier is still a stored Connection.
 _Avoid_: Edge, relationship, link (these are fine in implementation, but "Connection" is the domain term)
 
 **Path**:
@@ -61,7 +69,7 @@ One Character is referenced by name within the story world by another, without b
 One Character breaks the fourth wall to reference something/someone entirely outside their own Universe (e.g., a different franchise, or the real world). Directional; the referenced entity becomes its own Character node rather than a flag (see ADR-0002).
 
 **Same Issue**:
-Two Characters are both credited on the same comic issue, with no confirmation they ever shared a scene or even a story within it — an issue can bundle several unrelated stories (e.g. an anthology/Infinity Comic issue). This is the raw signal ingestion actually produces, always paired with **Unverified** Confidence, pending a human either confirming a stronger tier or downgrading it (see `docs/POST_MVP.md`'s curation UI). Symmetric.
+Two Characters are both credited on the same comic issue, with no confirmation they ever shared a scene or even a story within it — an issue can bundle several unrelated stories (e.g. an anthology/Infinity Comic issue). This is the raw signal ingestion actually produces, always paired with **Unverified** Confidence, pending a human either confirming a stronger tier or downgrading it (see `docs/POST_MVP.md`'s curation UI). Symmetric; represented structurally via shared Issue membership rather than a stored Connection record (ADR-0013) — Confidence/Tier are implicit from the pattern, not stored properties, for this tier specifically.
 _Avoid_: Shared issue, co-occurrence
 
 **Shared Identity**:

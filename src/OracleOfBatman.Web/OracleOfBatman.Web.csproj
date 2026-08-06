@@ -8,13 +8,13 @@
 
 
   <ItemGroup>
-    <PackageReference Include="MudBlazor" Version="8.*" />
-    <PackageReference Include="Neo4j.Driver" Version="6.3.0" />
+    <PackageReference Include="MudBlazor" Version="8.*"/>
+    <PackageReference Include="Neo4j.Driver" Version="6.3.0"/>
   </ItemGroup>
 
 
   <ItemGroup>
-    <ProjectReference Include="..\OracleOfBatman.Domain\OracleOfBatman.Domain.csproj" />
-    <ProjectReference Include="..\OracleOfBatman.Graph\OracleOfBatman.Graph.csproj" />
+    <ProjectReference Include="..\OracleOfBatman.Domain\OracleOfBatman.Domain.csproj"/>
+    <ProjectReference Include="..\OracleOfBatman.Graph\OracleOfBatman.Graph.csproj"/>
   </ItemGroup>
 </Project>

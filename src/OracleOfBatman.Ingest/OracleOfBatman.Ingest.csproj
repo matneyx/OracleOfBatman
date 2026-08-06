@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\OracleOfBatman.Domain\OracleOfBatman.Domain.csproj" />
-    <ProjectReference Include="..\OracleOfBatman.Graph\OracleOfBatman.Graph.csproj" />
+    <ProjectReference Include="..\OracleOfBatman.Domain\OracleOfBatman.Domain.csproj"/>
+    <ProjectReference Include="..\OracleOfBatman.Graph\OracleOfBatman.Graph.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Neo4j.Driver" Version="6.3.0" />
+    <PackageReference Include="Neo4j.Driver" Version="6.3.0"/>
   </ItemGroup>
 
   <PropertyGroup>
