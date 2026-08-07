@@ -8,8 +8,8 @@ public class HopTests
     var softServe = new Character(176719, "Soft Serve");
     var beast = new Character(15694, "Beast");
 
-    var a = new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified);
-    var b = new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified);
+    var a = new Hop(softServe, beast, new Issue(111, "Some Issue"));
+    var b = new Hop(softServe, beast, new Issue(111, "Some Issue"));
 
     Assert.Equal(a, b);
   }
@@ -20,8 +20,8 @@ public class HopTests
     var softServe = new Character(176719, "Soft Serve");
     var beast = new Character(15694, "Beast");
 
-    var forward = new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified);
-    var backward = new Hop(beast, softServe, 111, InteractionTier.SameIssue, Confidence.Unverified);
+    var forward = new Hop(softServe, beast, new Issue(111, "Some Issue"));
+    var backward = new Hop(beast, softServe, new Issue(111, "Some Issue"));
 
     Assert.NotEqual(forward, backward);
   }
@@ -32,10 +32,10 @@ public class HopTests
     var softServe = new Character(176719, "Soft Serve");
     var beast = new Character(15694, "Beast");
 
-    var hop = new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified, "Some Issue",
-      "https://comicvine.gamespot.com/some-issue/4000-111/");
+    var hop = new Hop(softServe, beast,
+      new Issue(111, "Some Issue", SiteDetailUrl: "https://comicvine.gamespot.com/some-issue/4000-111/"));
 
-    Assert.Equal("Some Issue", hop.ComicIssueName);
-    Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-111/", hop.ComicIssueSiteDetailUrl);
+    Assert.Equal("Some Issue", hop.Issue.Name);
+    Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-111/", hop.Issue.SiteDetailUrl);
   }
 }

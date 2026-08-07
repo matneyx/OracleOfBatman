@@ -6,6 +6,7 @@
 @inject IGraphStore GraphStore
 @inject IServiceProvider ServiceProvider
 @inject ISnackbar Snackbar
+@implements IDisposable
 
 <PageTitle>Oracle of Batman</PageTitle>
 
@@ -16,21 +17,25 @@
   <MudItem xs="12" sm="5">
     <MudAutocomplete T="Character" Label="Character A" @bind-Value="_characterA"
                      SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
-                     Clearable="true" ResetValueOnEmptyText="true">
-      <ItemTemplate><CharacterCard Character="context"/></ItemTemplate>
+                     Clearable="true" ResetValueOnEmptyText="true" data-testid="character-a-input">
+      <ItemTemplate>
+        <CharacterCard Character="context"/>
+      </ItemTemplate>
     </MudAutocomplete>
   </MudItem>
   <MudItem xs="12" sm="5">
     <MudAutocomplete T="Character" Label="Character B" @bind-Value="_characterB"
                      SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
-                     Clearable="true" ResetValueOnEmptyText="true">
-      <ItemTemplate><CharacterCard Character="context"/></ItemTemplate>
+                     Clearable="true" ResetValueOnEmptyText="true" data-testid="character-b-input">
+      <ItemTemplate>
+        <CharacterCard Character="context"/>
+      </ItemTemplate>
     </MudAutocomplete>
   </MudItem>
   <MudItem xs="12" sm="2" Class="d-flex align-center">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
                Disabled="@(_characterA is null || _characterB is null)"
-               OnClick="FindPathAsync">
+               OnClick="FindPathAsync" data-testid="go-button">
       Go
     </MudButton>
   </MudItem>
@@ -42,11 +47,13 @@
   <MudText Typo="Typo.subtitle1" Class="mb-2">Can't find a character above? Search Comic Vine directly:</MudText>
   <MudGrid>
     <MudItem xs="12" sm="9">
-      <MudTextField @bind-Value="_comicVineQuery" Label="Search Comic Vine" Immediate="true"/>
+      <MudTextField @bind-Value="_comicVineQuery" Label="Search Comic Vine" Immediate="true"
+                    data-testid="comic-vine-search-input"/>
     </MudItem>
     <MudItem xs="12" sm="3">
       <MudButton Variant="Variant.Outlined" FullWidth="true" OnClick="SearchComicVineAsync"
-                 Disabled="@(string.IsNullOrWhiteSpace(_comicVineQuery) || _comicVineSearching)">
+                 Disabled="@(string.IsNullOrWhiteSpace(_comicVineQuery) || _comicVineSearching)"
+                 data-testid="comic-vine-search-button">
         Search
       </MudButton>
     </MudItem>
@@ -95,9 +102,8 @@
     {
       <MudPaper Class="pa-3 mb-2 d-flex align-center flex-wrap ga-2" Outlined="true">
         <CharacterCard Character="hop.From"/>
-        <MudText>&nbsp;was @hop.Tier.ToDisplayPhrase() in&nbsp;</MudText>
-        <IssueCard Name="@hop.ComicIssueName" SiteDetailUrl="@hop.ComicIssueSiteDetailUrl"
-                   ImageUrl="@_issueThumbnails.GetValueOrDefault(hop.ComicIssueId ?? -1)"/>
+        <MudText>&nbsp;was credited in&nbsp;</MudText>
+        <IssueCard Issue="@hop.Issue"/>
         <MudText>&nbsp;with&nbsp;</MudText>
         <CharacterCard Character="hop.To"/>
       </MudPaper>
@@ -125,7 +131,6 @@
   private bool _searched;
   private bool _connecting;
   private bool _ingesting;
-  private readonly Dictionary<int, string?> _issueThumbnails = [];
 
   private string _comicVineQuery = "";
   private bool _comicVineSearching;
@@ -134,17 +139,34 @@
 
   private IComicVineCharacterSearchSource? _comicVineSearchSource;
   private IComicVineCharacterSource? _comicVineCharacterSource;
-  private IComicVineIssueSource? _comicVineIssueSource;
   private ConnectionCrawler? _connectionCrawler;
+  private IssueEnrichmentService? _issueEnrichmentService;
 
-  protected override void OnInitialized()
+  protected override async Task OnInitializedAsync()
   {
     // Only registered when COMIC_VINE_API_KEY is configured (Program.cs) — features that
     // need it are hidden rather than erroring when it's absent.
     _comicVineSearchSource = ServiceProvider.GetService<IComicVineCharacterSearchSource>();
     _comicVineCharacterSource = ServiceProvider.GetService<IComicVineCharacterSource>();
-    _comicVineIssueSource = ServiceProvider.GetService<IComicVineIssueSource>();
     _connectionCrawler = ServiceProvider.GetService<ConnectionCrawler>();
+    _issueEnrichmentService = ServiceProvider.GetService<IssueEnrichmentService>();
+
+    // Default to Batman.
+    var batman = await GraphStore.GetCharacterAsync(1699);
+    _characterB = batman;
+
+    _connectionCrawler?.CharacterAdded += CharacterAdded;
+    _connectionCrawler?.IssueConnectionConfirmed += IssueConnectionConfirmed;
+  }
+
+  private void IssueConnectionConfirmed(Issue obj)
+  {
+    Snackbar.Add($"Confirmed connection to {obj.ToDisplayName()}", Severity.Success);
+  }
+
+  private void CharacterAdded(Character obj)
+  {
+    Snackbar.Add($"Searching for connections to {obj.Name}", Severity.Success);
   }
 
   private async Task<IEnumerable<Character>> SearchCharactersAsync(string query, CancellationToken cancellationToken)
@@ -173,7 +195,7 @@
     {
       _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
       _searched = true;
-      await LoadIssueThumbnailsAsync();
+      await EnrichPathIssuesAsync();
     }
     catch (Exception ex)
     {
@@ -198,7 +220,7 @@
     {
       var result = await _connectionCrawler.PopulateConnectionsAsync(_characterA.ComicVineId, _characterB.ComicVineId, ConnectBudget);
       _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
-      await LoadIssueThumbnailsAsync();
+      await EnrichPathIssuesAsync();
 
       Snackbar.Add(
         result.Connected ? "Found a connection!" : $"No connection found after checking {result.CharactersFetched} character(s).",
@@ -216,23 +238,21 @@
     }
   }
 
-  private async Task LoadIssueThumbnailsAsync()
+  private async Task EnrichPathIssuesAsync()
   {
-    if (_comicVineIssueSource is null || _path is null)
+    if (_issueEnrichmentService is null || _path is null)
     {
       return;
     }
 
-    foreach (var issueId in _path.Hops.Select(h => h.ComicIssueId).Where(id => id.HasValue).Select(id => id!.Value).Distinct())
+    var enrichedHops = new List<Hop>();
+    foreach (var hop in _path.Hops)
     {
-      if (_issueThumbnails.ContainsKey(issueId))
-      {
-        continue;
-      }
-
-      var issue = await _comicVineIssueSource.GetIssueAsync(issueId);
-      _issueThumbnails[issueId] = issue.Image?.IconUrl;
+      var enrichedIssue = await _issueEnrichmentService.EnrichIfNeededAsync(hop.Issue);
+      enrichedHops.Add(new Hop(hop.From, hop.To, enrichedIssue));
     }
+
+    _path = _path with { Hops = enrichedHops };
   }
 
   private async Task SearchComicVineAsync()
@@ -308,4 +328,11 @@
     }
   }
 
+  public void Dispose()
+  {
+    Snackbar?.Dispose();
+
+    _connectionCrawler?.CharacterAdded -= CharacterAdded;
+    _connectionCrawler?.IssueConnectionConfirmed -= IssueConnectionConfirmed;
+  }
 }

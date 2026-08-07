@@ -1,19 +1,21 @@
-<MudCard>
+@using OracleOfBatman.Domain
+<MudCard data-testid="@($"issue-card-{Issue.ComicVineId}")">
   <MudCardContent>
     <MudGrid Spacing="1">
       <MudItem sm="4">
-        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large">
-          <MudImage Src="@ImageUrl"/>
+        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large" Class="rounded"
+                   data-testid="@("issue-avatar")">
+          <MudImage Src="@Issue.ImageUrl"/>
         </MudAvatar>
       </MudItem>
-      <MudItem sm="8">
-        @if (SiteDetailUrl is null or "")
+      <MudItem sm="8" data-testid="@("issue-name")">
+        @if (Issue.SiteDetailUrl is null or "")
         {
-          <MudText Typo="Typo.h5">@Name</MudText>
+          <MudText Typo="Typo.h5">@Issue.ToDisplayName()</MudText>
         }
         else
         {
-          <MudLink Href="@SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Name</MudLink>
+          <MudLink Href="@Issue.SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Issue.ToDisplayName()</MudLink>
         }
       </MudItem>
     </MudGrid>
@@ -21,12 +23,9 @@
 </MudCard>
 
 @code {
-  [Parameter]
-  public string? Name { get; set; }
 
   [Parameter]
-  public string? SiteDetailUrl { get; set; }
+  [EditorRequired]
+  public required Issue Issue { get; set; }
 
-  [Parameter]
-  public string? ImageUrl { get; set; }
 }

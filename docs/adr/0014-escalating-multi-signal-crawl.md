@@ -12,6 +12,15 @@ escalation tier below it that ADR-0010 only gestured at (POST_MVP.md's
 "issue-cast-based bridge discovery" idea) — now designed in full, and
 extended to teams as well as issues.
 
+> **Refined by ADR-0015.** Step 4 below (escalate to a fresh Comic Vine
+> fetch) now checks already-*materialized* Issue/Team `character_credits`/
+> roster arrays first — free, already in Neo4j, accumulated as a side
+> effect of unrelated earlier ingestions — and only falls back to a paid
+> fetch if that doesn't turn up enough candidates. ADR-0015 also sharpens
+> what "already-relevant" means for the strong-candidate rule: an Issue/
+> Team that's actually been materialized (confirmed overlap), not every
+> one anyone's ever been credited on.
+
 ## Motivation
 
 Comic Vine already has all the data needed to answer most connection

@@ -12,8 +12,8 @@ public class PathTests
     var path = new Path(
       [softServe, beast, bloodscream],
       [
-        new Hop(softServe, beast, 111, InteractionTier.SameIssue, Confidence.Unverified),
-        new Hop(beast, bloodscream, 222, InteractionTier.SameIssue, Confidence.Unverified)
+        new Hop(softServe, beast, new Issue(111, "Some Issue")),
+        new Hop(beast, bloodscream, new Issue(222, "Some Other Issue"))
       ]);
 
     Assert.Equal(2, path.BatmanNumber);
@@ -27,7 +27,7 @@ public class PathTests
 
     var path = new Path(
       [jimHammond, jeff],
-      [new Hop(jimHammond, jeff, 739613, InteractionTier.SameIssue, Confidence.Unverified)]);
+      [new Hop(jimHammond, jeff, new Issue(739613, "Some Issue"))]);
 
     Assert.Equal(1, path.BatmanNumber);
   }

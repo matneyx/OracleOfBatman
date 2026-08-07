@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<response>
+    <error><![CDATA[OK]]></error>
+    <limit>1</limit>
+    <offset>0</offset>
+    <number_of_page_results>1</number_of_page_results>
+    <number_of_total_results>1</number_of_total_results>
+    <status_code>1</status_code>
+    <results>
+        <aliases/>
+        <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/issue/4000-1101757/]]></api_detail_url>
+        <associated_images/>
+        <character_credits>
+            <character>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/character/4005-125054/]]></api_detail_url>
+                <id>125054</id>
+                <name><![CDATA[Gwenpool]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/gwenpool/4005-125054/]]></site_detail_url>
+            </character>
+            <character>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/character/4005-157242/]]></api_detail_url>
+                <id>157242</id>
+                <name><![CDATA[Jeff the Land Shark]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/jeff-the-land-shark/4005-157242/]]></site_detail_url>
+            </character>
+        </character_credits>
+        <character_died_in/>
+        <concept_credits>
+            <concept>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/concept/4015-56085/]]></api_detail_url>
+                <id>56085</id>
+                <name><![CDATA[Digital Comic]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/digital-comic/4015-56085/]]></site_detail_url>
+            </concept>
+            <concept>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/concept/4015-58141/]]></api_detail_url>
+                <id>58141</id>
+                <name><![CDATA[Marvel Infinity Comics]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/marvel-infinity-comics/4015-58141/]]></site_detail_url>
+            </concept>
+        </concept_credits>
+        <cover_date><![CDATA[2025-04-04]]></cover_date>
+        <date_added>2025-04-04 00:40:41</date_added>
+        <date_last_updated>2025-04-15 06:22:18</date_last_updated>
+        <deck/>
+        <description><![CDATA[<p><em>It's a battle of wits and wills as Gwenpool tries to trick Jeff into taking his medicine! "Spoonful of Everything - Part 2"!</em></p>]]></description>
+        <first_appearance_characters/>
+        <first_appearance_concepts/>
+        <first_appearance_locations/>
+        <first_appearance_objects/>
+        <first_appearance_storyarcs/>
+        <first_appearance_teams/>
+        <has_staff_review/>
+        <id>1101757</id>
+        <image>
+            <icon_url><![CDATA[https://comicvine.gamespot.com/a/uploads/square_avatar/11182/111829875/9680850-img_7746.jpeg]]></icon_url>
+            <medium_url><![CDATA[https://comicvine.gamespot.com/a/uploads/scale_medium/11182/111829875/9680850-img_7746.jpeg]]></medium_url>
+            <screen_url><![CDATA[https://comicvine.gamespot.com/a/uploads/screen_medium/11182/111829875/9680850-img_7746.jpeg]]></screen_url>
+            <screen_large_url><![CDATA[https://comicvine.gamespot.com/a/uploads/screen_kubrick/11182/111829875/9680850-img_7746.jpeg]]></screen_large_url>
+            <small_url><![CDATA[https://comicvine.gamespot.com/a/uploads/scale_small/11182/111829875/9680850-img_7746.jpeg]]></small_url>
+            <super_url><![CDATA[https://comicvine.gamespot.com/a/uploads/scale_large/11182/111829875/9680850-img_7746.jpeg]]></super_url>
+            <thumb_url><![CDATA[https://comicvine.gamespot.com/a/uploads/scale_avatar/11182/111829875/9680850-img_7746.jpeg]]></thumb_url>
+            <tiny_url><![CDATA[https://comicvine.gamespot.com/a/uploads/square_mini/11182/111829875/9680850-img_7746.jpeg]]></tiny_url>
+            <original_url><![CDATA[https://comicvine.gamespot.com/a/uploads/original/11182/111829875/9680850-img_7746.jpeg]]></original_url>
+            <image_tags><![CDATA[All Images]]></image_tags>
+        </image>
+        <issue_number>45</issue_number>
+        <location_credits/>
+        <name><![CDATA[Spoonful of Everything – Part 2!]]></name>
+        <object_credits/>
+        <person_credits>
+            <person>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/person/4040-45925/]]></api_detail_url>
+                <id>45925</id>
+                <name><![CDATA[Gurihiru]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/gurihiru/4040-45925/]]></site_detail_url>
+                <role><![CDATA[artist]]></role>
+            </person>
+            <person>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/person/4040-126993/]]></api_detail_url>
+                <id>126993</id>
+                <name><![CDATA[Jasmine Alvarez]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/jasmine-alvarez/4040-126993/]]></site_detail_url>
+                <role><![CDATA[production]]></role>
+            </person>
+            <person>
+                <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/person/4040-83841/]]></api_detail_url>
+                <id>83841</id>
+                <name><![CDATA[Kelly Thompson]]></name>
+                <site_detail_url><![CDATA[https://comicvine.gamespot.com/kelly-thompson/4040-83841/]]></site_detail_url>
+                <role><![CDATA[writer]]></role>
+            </person>
+        </person_credits>
+        <site_detail_url><![CDATA[https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/]]></site_detail_url>
+        <store_date><![CDATA[2025-04-04]]></store_date>
+        <story_arc_credits/>
+        <team_credits/>
+        <team_disbanded_in/>
+        <volume>
+            <api_detail_url><![CDATA[https://comicvine.gamespot.com/api/volume/4050-139047/]]></api_detail_url>
+            <id>139047</id>
+            <name><![CDATA[It's Jeff Infinity Comic]]></name>
+            <site_detail_url><![CDATA[https://comicvine.gamespot.com/its-jeff-infinity-comic/4050-139047/]]></site_detail_url>
+        </volume>
+    </results>
+    <version>1.0</version>
+</response>

@@ -46,14 +46,16 @@ public sealed class FindShortestPathAsyncTests : IAsyncLifetime
   }
 
   [Fact]
-  public async Task ReturnsOneHopPath_ForDirectConnection()
+  public async Task ReturnsOneHopPath_ViaSharedMaterializedIssue()
   {
+    // ADR-0015 Slice 5: array-based now — the overlap must be confirmed via
+    // FindOverlappingIssuesAsync, not written as a CONNECTION edge.
     var jimHammond = new Character(12605, "Jim Hammond");
     var jeff = new Character(157242, "Jeff the Land Shark");
     await _writer.UpsertCharacterAsync(jimHammond);
+    await _writer.UpsertCharacterIssueCreditsAsync(12605, [739613]);
     await _writer.UpsertCharacterAsync(jeff);
-    await _writer.UpsertConnectionAsync(new Connection(12605, 157242, 739613, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await _writer.FindOverlappingIssuesAsync(157242, [739613]);
 
     var path = await _writer.FindShortestPathAsync(12605, 157242, 5);
 
@@ -63,25 +65,22 @@ public sealed class FindShortestPathAsyncTests : IAsyncLifetime
     var hop = Assert.Single(path.Hops);
     Assert.Equal(jimHammond, hop.From);
     Assert.Equal(jeff, hop.To);
-    Assert.Equal(739613, hop.ComicIssueId);
-    Assert.Equal(InteractionTier.SameIssue, hop.Tier);
-    Assert.Equal(Confidence.Unverified, hop.Confidence);
+    Assert.Equal(739613, hop.Issue.ComicVineId);
   }
 
   [Fact]
-  public async Task ReturnsHopsInWalkOrder_RegardlessOfStoredRelationshipDirection()
+  public async Task ReturnsHopsInWalkOrder_ThroughSeparateMaterializedIssues()
   {
     var softServe = new Character(176719, "Soft Serve");
     var beast = new Character(15694, "Beast");
     var bloodscream = new Character(15734, "Bloodscream");
     await _writer.UpsertCharacterAsync(softServe);
+    await _writer.UpsertCharacterIssueCreditsAsync(176719, [111]);
     await _writer.UpsertCharacterAsync(beast);
+    await _writer.UpsertCharacterIssueCreditsAsync(15694, [111, 222]);
+    await _writer.FindOverlappingIssuesAsync(15694, [111, 222]); // confirms Soft Serve<->Beast via 111
     await _writer.UpsertCharacterAsync(bloodscream);
-    // Stored "backwards" relative to the walk direction we'll query in.
-    await _writer.UpsertConnectionAsync(new Connection(15694, 176719, 111, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
-    await _writer.UpsertConnectionAsync(new Connection(15734, 15694, 222, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await _writer.FindOverlappingIssuesAsync(15734, [222]); // confirms Beast<->Bloodscream via 222
 
     var path = await _writer.FindShortestPathAsync(176719, 15734, 5);
 
@@ -95,44 +94,83 @@ public sealed class FindShortestPathAsyncTests : IAsyncLifetime
   }
 
   [Fact]
-  public async Task ReturnsCharacterImageSiteDetailUrl_AndHopIssueNameAndSiteDetailUrl()
-  {
-    var jimHammond = new Character(12605, "Jim Hammond", "https://example.com/jim-icon.jpg",
-      "https://comicvine.gamespot.com/jim-hammond/4005-12605/");
-    var jeff = new Character(157242, "Jeff the Land Shark", "https://example.com/jeff-icon.jpg",
-      "https://comicvine.gamespot.com/jeff-the-land-shark/4005-157242/");
-    await _writer.UpsertCharacterAsync(jimHammond);
-    await _writer.UpsertCharacterAsync(jeff);
-    await _writer.UpsertConnectionAsync(new Connection(
-      12605, 157242, 739613, null, InteractionTier.SameIssue, Confidence.Unverified,
-      "Some Issue", "https://comicvine.gamespot.com/some-issue/4000-739613/"));
-
-    var path = await _writer.FindShortestPathAsync(12605, 157242, 5);
-
-    Assert.NotNull(path);
-    Assert.Equal(jimHammond, path.Characters[0]);
-    Assert.Equal(jeff, path.Characters[1]);
-    var hop = Assert.Single(path.Hops);
-    Assert.Equal("Some Issue", hop.ComicIssueName);
-    Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-739613/", hop.ComicIssueSiteDetailUrl);
-  }
-
-  [Fact]
   public async Task ReturnsNull_WhenShortestPathExceedsMaxDepth()
   {
     var a = new Character(1, "A");
     var b = new Character(2, "B");
     var c = new Character(3, "C");
     await _writer.UpsertCharacterAsync(a);
+    await _writer.UpsertCharacterIssueCreditsAsync(1, [111]);
     await _writer.UpsertCharacterAsync(b);
+    await _writer.UpsertCharacterIssueCreditsAsync(2, [111, 222]);
+    await _writer.FindOverlappingIssuesAsync(2, [111, 222]);
     await _writer.UpsertCharacterAsync(c);
-    await _writer.UpsertConnectionAsync(new Connection(1, 2, 111, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
-    await _writer.UpsertConnectionAsync(new Connection(2, 3, 222, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await _writer.FindOverlappingIssuesAsync(3, [222]);
 
     var path = await _writer.FindShortestPathAsync(1, 3, 1);
 
     Assert.Null(path);
+  }
+
+  [Fact]
+  public async Task ReturnsPathFromAnEstablishedConnection_WithoutAnyMaterializedIssueData()
+  {
+    // The fast path: an already-cached Connection answers this directly — no
+    // issue_credits, no materialized Issue, none of the array-based machinery at all.
+    var jimHammond = new Character(12605, "Jim Hammond");
+    var jeff = new Character(157242, "Jeff the Land Shark");
+    await _writer.UpsertCharacterAsync(jimHammond);
+    await _writer.UpsertCharacterAsync(jeff);
+    await _writer.UpsertConnectionAsync(new Connection(12605, 157242, 739613, null));
+
+    var path = await _writer.FindShortestPathAsync(12605, 157242, 5);
+
+    Assert.NotNull(path);
+    Assert.Equal(1, path.BatmanNumber);
+    var hop = Assert.Single(path.Hops);
+    Assert.Equal(jimHammond, hop.From);
+    Assert.Equal(jeff, hop.To);
+    Assert.Equal(739613, hop.Issue.ComicVineId);
+  }
+
+  [Fact]
+  public async Task WritesAConnection_ForEachHopOfANewlyDiscoveredPath()
+  {
+    // The array-based fallback is what found this — nothing was established yet.
+    // Its hops should get cached as real Connections so the next lookup for this
+    // pair (or an overlapping one) hits the fast path instead.
+    var jimHammond = new Character(12605, "Jim Hammond");
+    var jeff = new Character(157242, "Jeff the Land Shark");
+    await _writer.UpsertCharacterAsync(jimHammond);
+    await _writer.UpsertCharacterIssueCreditsAsync(12605, [739613]);
+    await _writer.UpsertCharacterAsync(jeff);
+    await _writer.FindOverlappingIssuesAsync(157242, [739613]);
+
+    var path = await _writer.FindShortestPathAsync(12605, 157242, 5);
+
+    Assert.NotNull(path);
+    var (_, connectionCount) = await _writer.GetSummaryAsync();
+    Assert.Equal(1, connectionCount);
+  }
+
+  [Fact]
+  public async Task WritesAConnection_ForEveryHopOfAMultiHopDiscoveredPath()
+  {
+    var softServe = new Character(176719, "Soft Serve");
+    var beast = new Character(15694, "Beast");
+    var bloodscream = new Character(15734, "Bloodscream");
+    await _writer.UpsertCharacterAsync(softServe);
+    await _writer.UpsertCharacterIssueCreditsAsync(176719, [111]);
+    await _writer.UpsertCharacterAsync(beast);
+    await _writer.UpsertCharacterIssueCreditsAsync(15694, [111, 222]);
+    await _writer.FindOverlappingIssuesAsync(15694, [111, 222]);
+    await _writer.UpsertCharacterAsync(bloodscream);
+    await _writer.FindOverlappingIssuesAsync(15734, [222]);
+
+    var path = await _writer.FindShortestPathAsync(176719, 15734, 5);
+
+    Assert.NotNull(path);
+    var (_, connectionCount) = await _writer.GetSummaryAsync();
+    Assert.Equal(2, connectionCount);
   }
 }

@@ -81,6 +81,9 @@ public sealed class ComicVineIssue
   [XmlElement("name")]
   public string? Name { get; set; }
 
+  [XmlElement("site_detail_url")]
+  public string? SiteDetailUrl { get; set; }
+
   [XmlElement("cover_date")]
   public string? CoverDate { get; set; }
 

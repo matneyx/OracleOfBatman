@@ -11,7 +11,5 @@ public sealed record Connection(
   int TargetCharacterComicVineId,
   int? ComicIssueId,
   DateOnly? ComicIssuePublishedAt,
-  InteractionTier Tier,
-  Confidence Confidence,
   string? ComicIssueName = null,
   string? ComicIssueSiteDetailUrl = null);

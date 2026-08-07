@@ -7,8 +7,10 @@ namespace OracleOfBatman.Domain;
 public sealed record Hop(
   Character From,
   Character To,
-  int? ComicIssueId,
-  InteractionTier Tier,
-  Confidence Confidence,
-  string? ComicIssueName = null,
-  string? ComicIssueSiteDetailUrl = null);
+  Issue Issue);
+
+// int? ComicIssueId,
+// InteractionTier Tier,
+// Confidence Confidence,
+// string? ComicIssueName = null,
+// string? ComicIssueSiteDetailUrl = null);

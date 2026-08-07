@@ -25,8 +25,8 @@ A specific ongoing publication that Issues belong to (e.g., "Mad Magazine," "Ama
 _Avoid_: Series, publication, book
 
 **Issue**:
-A single published comic issue, belonging to exactly one Title, crediting one or more Characters. A Same Issue Connection between two Characters is represented structurally — both Characters credited on the same Issue — rather than as its own stored record (see ADR-0013); other Interaction Tiers still reference an Issue as an explicit property of a stored Connection.
-_Avoid_: Comic, book (in this specific sense; "book" collides with Title's own avoid-list)
+A single published comic issue, belonging to exactly one Title, crediting one or more Characters, and belonging to exactly one Volume (a Title's own internal series numbering — folded into Issue as plain fields rather than a separate term, since nothing beyond its name and id is needed). A Same Issue Connection between two Characters is represented structurally — both Characters credited on the same Issue — rather than as its own stored record; other Interaction Tiers still reference an Issue as an explicit property of a stored Connection. Not materialized eagerly: an Issue only exists once two already-known Characters are confirmed to share it (see ADR-0015, which also settles the storage shape as mirrored arrays rather than graph edges — ADR-0013's original proposal).
+_Avoid_: Comic, book (in this specific sense; "book" collides with Title's own avoid-list); Volume as a separate term
 
 **Team**:
 A group of Characters (e.g. the X-Men), used only as an ingestion-time discovery signal — two Characters sharing a Team membership is worth investigating further, but is never itself a Connection or a Path segment (see ADR-0014). Unlike every other term in this list, Team carries no pathfinding meaning: it never contributes to a Batman Number.

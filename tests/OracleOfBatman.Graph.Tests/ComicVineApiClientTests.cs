@@ -32,7 +32,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     var character = await client.GetCharacterAsync(157242);
 
@@ -51,7 +52,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     await client.GetCharacterAsync(157242);
 
@@ -70,7 +72,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCharacterAsync(157242));
   }
@@ -93,7 +96,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     var issue = await client.GetIssueAsync(739613);
 
@@ -125,7 +129,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     var results = await client.SearchCharactersAsync("blood rayne");
 
@@ -151,7 +156,8 @@ public class ComicVineApiClientTests
     var characterRateLimiter = new ComicVineRateLimiter(1, TimeSpan.FromMinutes(1));
     var issueRateLimiter = new ComicVineRateLimiter(1, TimeSpan.FromMinutes(1));
     var searchRateLimiter = new ComicVineRateLimiter(1, TimeSpan.FromMinutes(1));
-    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter: characterRateLimiter, issueRateLimiter: issueRateLimiter, searchRateLimiter: searchRateLimiter);
+    var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
 
     await client.GetCharacterAsync(157242); // consumes the character resource's only slot
 

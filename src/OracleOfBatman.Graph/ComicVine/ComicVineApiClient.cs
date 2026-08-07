@@ -9,7 +9,12 @@ namespace OracleOfBatman.Graph.ComicVine;
 ///   never during the crawl itself. Caller owns httpClient's lifetime and configures
 ///   BaseAddress (https://comicvine.gamespot.com/api/).
 /// </summary>
-public sealed class ComicVineApiClient(HttpClient httpClient, string apiKey, ComicVineRateLimiter characterRateLimiter, ComicVineRateLimiter issueRateLimiter, ComicVineRateLimiter searchRateLimiter) : IComicVineCharacterSource,
+public sealed class ComicVineApiClient(
+  HttpClient httpClient,
+  string apiKey,
+  ComicVineRateLimiter characterRateLimiter,
+  ComicVineRateLimiter issueRateLimiter,
+  ComicVineRateLimiter searchRateLimiter) : IComicVineCharacterSource,
   IComicVineIssueSource, IComicVineCharacterSearchSource
 {
 

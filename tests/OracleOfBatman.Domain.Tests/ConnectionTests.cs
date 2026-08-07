@@ -5,10 +5,8 @@ public class ConnectionTests
   [Fact]
   public void SameFields_AreEqual()
   {
-    var a = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4), InteractionTier.SharedScene,
-      Confidence.Unverified);
-    var b = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4), InteractionTier.SharedScene,
-      Confidence.Unverified);
+    var a = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4));
+    var b = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4));
 
     Assert.Equal(a, b);
   }
@@ -16,8 +14,8 @@ public class ConnectionTests
   [Fact]
   public void DifferentComicIssueId_AreNotEqual()
   {
-    var firstIssue = new Connection(125054, 157242, 1101757, null, InteractionTier.SharedScene, Confidence.Unverified);
-    var secondIssue = new Connection(125054, 157242, 1101758, null, InteractionTier.SharedScene, Confidence.Unverified);
+    var firstIssue = new Connection(125054, 157242, 1101757, null);
+    var secondIssue = new Connection(125054, 157242, 1101758, null);
 
     Assert.NotEqual(firstIssue, secondIssue);
   }
@@ -25,7 +23,7 @@ public class ConnectionTests
   [Fact]
   public void ComicIssueNameAndSiteDetailUrl_DefaultToNull()
   {
-    var connection = new Connection(125054, 157242, 1101757, null, InteractionTier.SameIssue, Confidence.Unverified);
+    var connection = new Connection(125054, 157242, 1101757, null);
 
     Assert.Null(connection.ComicIssueName);
     Assert.Null(connection.ComicIssueSiteDetailUrl);
@@ -35,7 +33,7 @@ public class ConnectionTests
   public void ComicIssueNameAndSiteDetailUrl_CanBeSet()
   {
     var connection = new Connection(
-      125054, 157242, 1101757, null, InteractionTier.SameIssue, Confidence.Unverified,
+      125054, 157242, 1101757, null,
       "Spoonful of Everything – Part 2!",
       "https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/");
 

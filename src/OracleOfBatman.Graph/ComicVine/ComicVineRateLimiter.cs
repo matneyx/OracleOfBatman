@@ -1,10 +1,12 @@
 namespace OracleOfBatman.Graph.ComicVine;
 
-/// <summary>Sliding-window throttle for outgoing Comic Vine requests — a permit is a
-/// request slot; each one refills itself <paramref name="window"/> after being granted,
-/// rather than needing a manually-tracked timestamp queue. Exists because a session with no
-/// throttling at all once burned through 3504 requests/hour against Comic Vine's 200/hour
-/// limit (ADR-0004) — not a loop bug, just unpaced legitimate traffic.</summary>
+/// <summary>
+///   Sliding-window throttle for outgoing Comic Vine requests — a permit is a
+///   request slot; each one refills itself <paramref name="window" /> after being granted,
+///   rather than needing a manually-tracked timestamp queue. Exists because a session with no
+///   throttling at all once burned through 3504 requests/hour against Comic Vine's 200/hour
+///   limit (ADR-0004) — not a loop bug, just unpaced legitimate traffic.
+/// </summary>
 public sealed class ComicVineRateLimiter(int maxRequestsPerWindow, TimeSpan window)
 {
   private readonly SemaphoreSlim _semaphore = new(maxRequestsPerWindow, maxRequestsPerWindow);

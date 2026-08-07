@@ -37,16 +37,20 @@ if (comicVineApiKey is not null)
     var characterRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
     var issueRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
     var searchRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
-    return new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter, searchRateLimiter);
+    return new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter,
+      searchRateLimiter);
   });
   builder.Services.AddScoped<IComicVineCharacterSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
   builder.Services.AddScoped<IComicVineIssueSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
   builder.Services.AddScoped<IComicVineCharacterSearchSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
-  builder.Services.AddScoped(sp => new ConnectionCrawler(sp.GetRequiredService<IComicVineCharacterSource>(),
+  builder.Services.AddScoped(sp => new ConnectionCrawler(sp.GetRequiredService<IComicVineCharacterSource>(), sp.GetRequiredService<IGraphStore>()));
+  builder.Services.AddScoped(sp => new IssueEnrichmentService(
     sp.GetRequiredService<IComicVineIssueSource>(), sp.GetRequiredService<IGraphStore>()));
 }
 
 var app = builder.Build();
+
+await SeedBatmanIfMissingAsync(app.Services);
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -65,6 +69,29 @@ app.MapRazorComponents<App>()
   .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// It's the Oracle of *Batman* — he should always be findable, and defaults to Character B
+// on the search page (Home.razor) once present. Only possible when Comic Vine is configured
+// (COMIC_VINE_API_KEY set) — same hide-rather-than-error pattern as every other Comic
+// Vine-dependent feature; skipped silently otherwise. A plain existence check costs nothing
+// once he's already seeded, so this runs on every startup rather than needing its own flag.
+static async Task SeedBatmanIfMissingAsync(IServiceProvider services)
+{
+  const int batmanComicVineId = 1699;
+
+  using var scope = services.CreateScope();
+  var graphStore = scope.ServiceProvider.GetRequiredService<IGraphStore>();
+  if (await graphStore.GetCharacterAsync(batmanComicVineId) is not null)
+  {
+    return;
+  }
+
+  var connectionCrawler = scope.ServiceProvider.GetService<ConnectionCrawler>();
+  if (connectionCrawler is not null)
+  {
+    await connectionCrawler.IngestCharacterAsync(batmanComicVineId);
+  }
+}
 
 // Web is launched by external tooling that doesn't inherit an already-`source`d shell
 // environment (unlike Ingest, run directly via `dotnet run` from a shell that has it) — so

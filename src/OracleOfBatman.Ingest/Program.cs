@@ -41,12 +41,13 @@ httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("OracleOfBatman/0.1 (+https:
 var characterRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
 var issueRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
 var searchRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
-var characterSource = new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter, searchRateLimiter);
+var characterSource = new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter,
+  searchRateLimiter);
 
 await using var driver = GraphDatabase.Driver(neo4jUri, AuthTokens.Basic(neo4jUsername, neo4jPassword));
 var graphStore = new Neo4jGraphWriter(driver, neo4jDatabase);
 
-var crawler = new ConnectionCrawler(characterSource, characterSource, graphStore);
+var crawler = new ConnectionCrawler(characterSource, graphStore);
 var result = await crawler.PopulateConnectionsAsync(seedIds[0], seedIds[1], budget);
 
 Console.WriteLine(result.Connected

@@ -77,4 +77,64 @@ public sealed class IssueCreditsOverlapTests : IAsyncLifetime
     Assert.Equal(1, overlap.Key);
     Assert.Equal([739613], overlap.Value);
   }
+
+  [Fact]
+  public async Task FindOverlappingIssues_MaterializesAnIssueNode_WhenTwoCharactersShareIt()
+  {
+    // The overlap itself is what triggers materialization (ADR-0015) — an Issue node
+    // never gets created just because one Character's own issue_credits mentions it.
+    await _writer.UpsertCharacterAsync(new Character(1, "A"));
+    await _writer.UpsertCharacterIssueCreditsAsync(1, [739613]);
+    await _writer.UpsertCharacterAsync(new Character(2, "B"));
+
+    await _writer.FindOverlappingIssuesAsync(2, [739613, 717540]);
+
+    var materialized = await _writer.GetIssueAsync(739613);
+    Assert.NotNull(materialized);
+    Assert.Equal(739613, materialized.ComicVineId);
+
+    var characterCredits = await ReadIssueCharacterCreditsAsync(739613);
+    Assert.Equal([1, 2], characterCredits.OrderBy(id => id));
+  }
+
+  [Fact]
+  public async Task FindOverlappingIssues_DoesNotMaterializeAnIssueNode_WhenNoOverlapExists()
+  {
+    await _writer.UpsertCharacterAsync(new Character(1, "A"));
+    await _writer.UpsertCharacterIssueCreditsAsync(1, [739613]);
+    await _writer.UpsertCharacterAsync(new Character(2, "B"));
+
+    await _writer.FindOverlappingIssuesAsync(2, [717540]);
+
+    var materialized = await _writer.GetIssueAsync(739613);
+    Assert.Null(materialized);
+  }
+
+  [Fact]
+  public async Task FindOverlappingIssues_AccumulatesCharacterCreditsAcrossSeparateOverlapDiscoveries()
+  {
+    // The D-discovery mechanism central to ADR-0015: the same Issue's character_credits
+    // grows as unrelated crawl runs each separately confirm they share it, not just the
+    // pair that first materialized it.
+    await _writer.UpsertCharacterAsync(new Character(1, "A"));
+    await _writer.UpsertCharacterIssueCreditsAsync(1, [739613]);
+    await _writer.UpsertCharacterAsync(new Character(2, "B"));
+    await _writer.FindOverlappingIssuesAsync(2, [739613]);
+
+    await _writer.UpsertCharacterAsync(new Character(3, "C"));
+    await _writer.FindOverlappingIssuesAsync(3, [739613]);
+
+    var characterCredits = await ReadIssueCharacterCreditsAsync(739613);
+    Assert.Equal([1, 2, 3], characterCredits.OrderBy(id => id));
+  }
+
+  private async Task<int[]> ReadIssueCharacterCreditsAsync(int comicVineId)
+  {
+    await using var session = _driver.AsyncSession();
+    var cursor = await session.RunAsync(
+      "MATCH (i:Issue {comic_vine_id: $id}) RETURN i.character_credits AS characterCredits",
+      new { id = comicVineId });
+    var record = await cursor.SingleAsync();
+    return record["characterCredits"].As<List<object>>().Select(v => v.As<int>()).ToArray();
+  }
 }

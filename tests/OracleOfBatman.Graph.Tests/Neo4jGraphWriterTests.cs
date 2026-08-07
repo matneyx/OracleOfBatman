@@ -42,14 +42,62 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
   }
 
   [Fact]
+  public async Task GetCharacterAsync_ReturnsThePersistedCharacter()
+  {
+    var writer = new Neo4jGraphWriter(_driver);
+    var batman = new Character(1699, "Batman", "https://example.com/batman.jpg",
+      "https://comicvine.gamespot.com/batman/4005-1699/");
+    await writer.UpsertCharacterAsync(batman);
+
+    var found = await writer.GetCharacterAsync(1699);
+
+    Assert.Equal(batman, found);
+  }
+
+  [Fact]
+  public async Task GetCharacterAsync_ReturnsNullWhenNotYetPersisted()
+  {
+    var writer = new Neo4jGraphWriter(_driver);
+
+    var found = await writer.GetCharacterAsync(1699);
+
+    Assert.Null(found);
+  }
+
+  [Fact]
+  public async Task GetIssueAsync_ReturnsNullWhenNotYetMaterialized()
+  {
+    // Materialization only happens via a confirmed overlap (ADR-0015) — a plain
+    // never-referenced Comic Vine issue id has no Issue node at all.
+    var writer = new Neo4jGraphWriter(_driver);
+
+    var found = await writer.GetIssueAsync(1101757);
+
+    Assert.Null(found);
+  }
+
+  [Fact]
+  public async Task UpsertIssueAsync_PersistsNameImageVolumeAndSiteDetailUrl()
+  {
+    // ADR-0015 Slice 6: the unified enrichment fetch's write-back step.
+    var writer = new Neo4jGraphWriter(_driver);
+    var issue = new Issue(500, "Some Issue", "https://example.com/cover.jpg",
+      "https://comicvine.gamespot.com/some-issue/4000-500/", 9, "The Volume Title");
+
+    await writer.UpsertIssueAsync(issue);
+
+    var found = await writer.GetIssueAsync(500);
+    Assert.Equal(issue, found);
+  }
+
+  [Fact]
   public async Task UpsertConnection_CreatesOneRelationshipBetweenExistingCharacters()
   {
     var writer = new Neo4jGraphWriter(_driver);
     await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
     await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
 
-    var connection = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4), InteractionTier.SameIssue,
-      Confidence.Unverified);
+    var connection = new Connection(125054, 157242, 1101757, new DateOnly(2025, 4, 4));
     await writer.UpsertConnectionAsync(connection);
     await writer.UpsertConnectionAsync(connection);
 
@@ -71,13 +119,15 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
   }
 
   [Fact]
-  public async Task PathExists_TrueViaDirectConnection()
+  public async Task PathExists_TrueViaSharedMaterializedIssue()
   {
+    // ADR-0015 Slice 5: PathExistsAsync is array-based now — the overlap must be
+    // confirmed via FindOverlappingIssuesAsync, not written as a CONNECTION edge.
     var writer = new Neo4jGraphWriter(_driver);
     await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+    await writer.UpsertCharacterIssueCreditsAsync(12605, [1101757]);
     await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
-    await writer.UpsertConnectionAsync(new Connection(12605, 157242, 1101757, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await writer.FindOverlappingIssuesAsync(157242, [1101757]);
 
     var pathExists = await writer.PathExistsAsync(12605, 157242);
 
@@ -85,16 +135,32 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
   }
 
   [Fact]
-  public async Task PathExists_TrueViaMultiHopConnectionRegardlessOfRelationshipDirection()
+  public async Task PathExists_TrueViaMultiHopThroughSeparateMaterializedIssues()
   {
     var writer = new Neo4jGraphWriter(_driver);
     await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+    await writer.UpsertCharacterIssueCreditsAsync(12605, [111]);
     await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
+    await writer.UpsertCharacterIssueCreditsAsync(125054, [111, 222]);
+    await writer.FindOverlappingIssuesAsync(125054, [111, 222]); // confirms Jim<->Gwenpool via 111
     await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
-    await writer.UpsertConnectionAsync(new Connection(12605, 125054, 111, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
-    await writer.UpsertConnectionAsync(new Connection(157242, 125054, 222, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await writer.FindOverlappingIssuesAsync(157242, [222]); // confirms Gwenpool<->Jeff via 222
+
+    var pathExists = await writer.PathExistsAsync(12605, 157242);
+
+    Assert.True(pathExists);
+  }
+
+  [Fact]
+  public async Task PathExists_TrueViaEstablishedConnection_WithoutAnyMaterializedIssueData()
+  {
+    // The fast path: an already-cached Connection (written after some earlier
+    // successful find) answers this without ever touching issue_credits/materialized
+    // Issues at all.
+    var writer = new Neo4jGraphWriter(_driver);
+    await writer.UpsertCharacterAsync(new Character(12605, "Jim Hammond"));
+    await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
+    await writer.UpsertConnectionAsync(new Connection(12605, 157242, 739613, null));
 
     var pathExists = await writer.PathExistsAsync(12605, 157242);
 
@@ -134,7 +200,7 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
     await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
 
     var connection = new Connection(
-      125054, 157242, 1101757, null, InteractionTier.SameIssue, Confidence.Unverified,
+      125054, 157242, 1101757, null,
       "Spoonful of Everything – Part 2!",
       "https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/");
     await writer.UpsertConnectionAsync(connection);
@@ -155,31 +221,11 @@ public sealed class Neo4jGraphWriterTests : IAsyncLifetime
     // Same real-world Same Issue connection, but written with Source/Target swapped —
     // e.g. because a later crawl discovered the pair in the opposite order. Same Issue is
     // Symmetric (CONTEXT.md), so this must still resolve to exactly one relationship.
-    await writer.UpsertConnectionAsync(new Connection(125054, 157242, 1101757, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
-    await writer.UpsertConnectionAsync(new Connection(157242, 125054, 1101757, null, InteractionTier.SameIssue,
-      Confidence.Unverified));
+    await writer.UpsertConnectionAsync(new Connection(125054, 157242, 1101757, null));
+    await writer.UpsertConnectionAsync(new Connection(157242, 125054, 1101757, null));
 
     var (_, connectionCount) = await writer.GetSummaryAsync();
     Assert.Equal(1, connectionCount);
-  }
-
-  [Fact]
-  public async Task UpsertConnection_DirectionalTier_KeepsOppositeDirectionAsADistinctRelationship()
-  {
-    var writer = new Neo4jGraphWriter(_driver);
-    await writer.UpsertCharacterAsync(new Character(125054, "Gwenpool"));
-    await writer.UpsertCharacterAsync(new Character(157242, "Jeff the Land Shark"));
-
-    // In-Universe Mention is Directional (CONTEXT.md) — Gwenpool mentioning Jeff is a
-    // different fact than Jeff mentioning Gwenpool, so both must be kept.
-    await writer.UpsertConnectionAsync(new Connection(125054, 157242, 1101757, null, InteractionTier.InUniverseMention,
-      Confidence.Unverified));
-    await writer.UpsertConnectionAsync(new Connection(157242, 125054, 1101757, null, InteractionTier.InUniverseMention,
-      Confidence.Unverified));
-
-    var (_, connectionCount) = await writer.GetSummaryAsync();
-    Assert.Equal(2, connectionCount);
   }
 
   private async Task<(string? ImageUrl, string? SiteDetailUrl)> ReadCharacterUrlsAsync(int comicVineId)

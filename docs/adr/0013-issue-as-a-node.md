@@ -8,6 +8,15 @@ Design-only ADR — the decisions below are not yet implemented. A future
 ticket builds them, matching how ADR-0010 designed the crawl algorithm
 before MVP ticket 4 built it.
 
+> **Superseded in part by ADR-0015.** The problem statement, "Same Issue
+> becomes structural," and "keep Connection for future tiers" below are
+> still accurate. The specific storage mechanism (`CREDITED_IN` edges) and
+> the Bacon-Number pathfinding Cypher are not — ADR-0015 replaces edges
+> with mirrored array properties (`Character.issue_credits` /
+> `Issue.character_credits`), lazily materialized only on confirmed
+> overlap, and moves pathfinding from a single Cypher `shortestPath()`
+> query to an application-level BFS. Read ADR-0015 for the current plan.
+
 ## Problem
 
 Same Issue is currently stored as a pairwise `CONNECTION` relationship per
