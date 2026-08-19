@@ -15,7 +15,7 @@ public class CharacterCardTests : BunitContext
   [Fact]
   public void RendersNameAsALink_WhenSiteDetailUrlIsPresent()
   {
-    var character = new Character(12605, "Jim Hammond", null, "https://comicvine.gamespot.com/jim-hammond/4005-12605/");
+    var character = new Character(12605, "Jim Hammond", imageUrl: null, siteDetailUrl: "https://comicvine.gamespot.com/jim-hammond/4005-12605/");
 
     var cut = Render<CharacterCard>(p => p.Add(c => c.Character, character));
 
@@ -40,7 +40,7 @@ public class CharacterCardTests : BunitContext
   [Fact]
   public void RendersAnAvatarImage_WhenImageUrlIsPresent()
   {
-    var character = new Character(12605, "Jim Hammond", "https://example.com/jim.jpg");
+    var character = new Character(12605, "Jim Hammond", imageUrl: "https://example.com/jim.jpg");
 
     var cut = Render<CharacterCard>(p => p.Add(c => c.Character, character));
 
@@ -53,7 +53,7 @@ public class CharacterCardTests : BunitContext
   [InlineData("https://comicvine.gamespot.com/jim-hammond/4005-12605/")]
   public void NameElementHasATestId_RegardlessOfWhetherItsALinkOrPlainText(string? siteDetailUrl)
   {
-    var character = new Character(12605, "Jim Hammond", null, siteDetailUrl);
+    var character = new Character(12605, "Jim Hammond", imageUrl: null, siteDetailUrl: siteDetailUrl);
 
     var cut = Render<CharacterCard>(p => p.Add(c => c.Character, character));
 
@@ -63,7 +63,7 @@ public class CharacterCardTests : BunitContext
   [Fact]
   public void AvatarElementHasATestId()
   {
-    var character = new Character(12605, "Jim Hammond", "https://example.com/jim.jpg");
+    var character = new Character(12605, "Jim Hammond", imageUrl: "https://example.com/jim.jpg");
 
     var cut = Render<CharacterCard>(p => p.Add(c => c.Character, character));
 

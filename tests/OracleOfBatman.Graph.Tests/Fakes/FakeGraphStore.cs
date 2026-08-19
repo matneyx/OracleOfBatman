@@ -5,28 +5,20 @@ namespace OracleOfBatman.Graph.Tests.Fakes;
 
 /// <summary>
 ///   In-memory IGraphStore so ConnectionCrawler's decision logic is testable without
-///   Docker/Neo4j. Path existence is BFS over an undirected adjacency built from Connections,
-///   matching Neo4jGraphWriter.PathExistsAsync's undirected Cypher pattern.
+///   Docker/Neo4j. Path existence is BFS over adjacency built from CREDITED_IN edges
+///   (ADR-0016), matching Neo4jGraphWriter.PathExistsAsync's shortestPath() traversal.
 /// </summary>
 public sealed class FakeGraphStore : IGraphStore
 {
-  private readonly Dictionary<int, HashSet<int>> _adjacency = [];
-  private readonly Dictionary<int, HashSet<int>> _characterIssueCredits = []; // character id -> their own issue_credits
+  private readonly Dictionary<int, HashSet<int>> _characterIssueCredits = []; // character id -> credited issue ids
   private readonly Dictionary<int, Character> _characters = [];
-  private readonly List<Connection> _connections = [];
 
   private readonly Dictionary<int, HashSet<int>>
-    _issueCharacterCredits = []; // issue id -> materialized character_credits
+    _issueCharacterCredits = []; // issue id -> credited character ids
 
   private readonly Dictionary<int, Issue> _issues = [];
 
   public IReadOnlyList<Character> Characters => [.. _characters.Values];
-
-  public IReadOnlyList<Connection> Connections => _connections;
-
-  public IReadOnlyDictionary<int, IReadOnlyCollection<int>> IssueCharacterCredits
-    => _issueCharacterCredits.ToDictionary<KeyValuePair<int, HashSet<int>>, int, IReadOnlyCollection<int>>(x => x.Key,
-      x => [.. x.Value]);
 
   public Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId)
   {
@@ -72,7 +64,9 @@ public sealed class FakeGraphStore : IGraphStore
       var (current, depth) = queue.Dequeue();
       if (current == characterBComicVineId)
       {
-        return await ReconstructPathAsync(characterBComicVineId, parent);
+        var path = await ReconstructPathAsync(characterBComicVineId, parent);
+        IncrementUsageCounts(path);
+        return path;
       }
 
       if (depth >= maxDepth) continue;
@@ -90,6 +84,12 @@ public sealed class FakeGraphStore : IGraphStore
     return null;
   }
 
+  public async Task RecordSeedUseAsync(int characterAComicVineId, int characterBComicVineId)
+  {
+      _characters[characterAComicVineId].SeedUseCount++;
+      _characters[characterBComicVineId].SeedUseCount++;
+  }
+
   public Task UpsertCharacterAsync(Character character)
   {
     _characters[character.ComicVineId] = character;
@@ -99,6 +99,41 @@ public sealed class FakeGraphStore : IGraphStore
   public Task<Character?> GetCharacterAsync(int comicVineId) =>
     Task.FromResult(_characters.GetValueOrDefault(comicVineId));
 
+  public Task UpsertCreditedInAsync(int comicVineCharacterId, IReadOnlyList<Issue> issueCredits)
+  {
+    try
+    {
+      if(!_characterIssueCredits.ContainsKey(comicVineCharacterId))
+      {
+        _characterIssueCredits[comicVineCharacterId] = [];
+      }
+
+      foreach (var issue in issueCredits)
+      {
+        // Add issue to _characterIssueCredits
+        _characterIssueCredits[comicVineCharacterId].Add(issue.ComicVineId);
+
+        // Ensure that _issueCharacterCredits has the issue
+        if(!_issueCharacterCredits.ContainsKey(issue.ComicVineId))
+        {
+          _issueCharacterCredits[issue.ComicVineId] = [];
+        }
+
+        // Add character to _issueCharacterCredits
+        _issueCharacterCredits[issue.ComicVineId].Add(comicVineCharacterId);
+
+        // Attempt to add issue to _issues; TryAdd so we don't overwrite existing issues
+        _issues.TryAdd(issue.ComicVineId, issue);
+      }
+
+      return Task.CompletedTask;
+    }
+    catch (Exception exception)
+    {
+      return Task.FromException(exception);
+    }
+  }
+
   public Task<Issue?> GetIssueAsync(int comicVineId) => _issues.TryGetValue(comicVineId, out var issue)
     ? Task.FromResult(issue)
     : Task.FromResult<Issue?>(null);
@@ -106,57 +141,6 @@ public sealed class FakeGraphStore : IGraphStore
   public Task UpsertIssueAsync(Issue issue)
   {
     _issues[issue.ComicVineId] = issue;
-    return Task.CompletedTask;
-  }
-
-  public Task UpsertCharacterIssueCreditsAsync(int comicVineCharacterId, IReadOnlyList<int> issueCreditIds)
-  {
-    _characterIssueCredits[comicVineCharacterId] = [.. issueCreditIds];
-    return Task.CompletedTask;
-  }
-
-  public Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> FindOverlappingIssuesAsync(int comicVineCharacterId,
-    IReadOnlyList<int> issueCreditIds)
-  {
-    var result = new Dictionary<int, IReadOnlyList<int>>();
-
-    foreach (var (otherCharacterId, otherIssues) in _characterIssueCredits)
-    {
-      if (otherCharacterId == comicVineCharacterId)
-      {
-        continue;
-      }
-
-      var sharedIssueIds = otherIssues.Intersect(issueCreditIds).ToHashSet();
-
-      if (sharedIssueIds.Count > 0)
-      {
-        result[otherCharacterId] = [.. sharedIssueIds];
-
-        foreach (var issueId in sharedIssueIds)
-        {
-          _issues.TryAdd(issueId, new Issue(issueId, null));
-
-          var credits = _issueCharacterCredits.GetValueOrDefault(issueId) ?? [];
-          credits.Add(comicVineCharacterId);
-          credits.Add(otherCharacterId);
-          _issueCharacterCredits[issueId] = credits;
-        }
-      }
-    }
-
-    return Task.FromResult<IReadOnlyDictionary<int, IReadOnlyList<int>>>(result);
-  }
-
-  public Task UpsertConnectionAsync(Connection connection)
-  {
-    _connections.Add(connection);
-
-    _adjacency.TryAdd(connection.SourceCharacterComicVineId, []);
-    _adjacency.TryAdd(connection.TargetCharacterComicVineId, []);
-    _adjacency[connection.SourceCharacterComicVineId].Add(connection.TargetCharacterComicVineId);
-    _adjacency[connection.TargetCharacterComicVineId].Add(connection.SourceCharacterComicVineId);
-
     return Task.CompletedTask;
   }
 
@@ -171,29 +155,27 @@ public sealed class FakeGraphStore : IGraphStore
     return Task.FromResult<IReadOnlyList<Character>>(results);
   }
 
-  private Path ReconstructPath(int startId, int endId, Dictionary<int, int> parent)
+  public Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds)
   {
-    var idPath = new List<int> { endId };
-    while (parent.TryGetValue(idPath[^1], out var previous))
+    var candidate = _characters.Values
+      .Where(c => c.IngestionDateTime is not null && !excludedIds.Contains(c.ComicVineId))
+      .OrderBy(c => c.IngestionDateTime)
+      .FirstOrDefault();
+
+    return Task.FromResult(candidate);
+  }
+
+  private void IncrementUsageCounts(Path path)
+  {
+    foreach (var bridge in path.Characters.Skip(1).SkipLast(1))
     {
-      idPath.Add(previous);
+      _characters[bridge.ComicVineId] = bridge with { BridgeUseCount = bridge.BridgeUseCount + 1 };
     }
 
-    idPath.Reverse();
-
-    var characters = idPath.Select(id => _characters[id]).ToList();
-    var hops = new List<Hop>();
-    for (var i = 0; i < idPath.Count - 1; i++)
+    foreach (var hop in path.Hops)
     {
-      var connection = _connections.First(c =>
-        (c.SourceCharacterComicVineId == idPath[i] && c.TargetCharacterComicVineId == idPath[i + 1]) ||
-        (c.SourceCharacterComicVineId == idPath[i + 1] && c.TargetCharacterComicVineId == idPath[i]));
-      hops.Add(new Hop(characters[i], characters[i + 1],
-        new Issue(connection.ComicIssueId.Value, connection.ComicIssueName,
-          SiteDetailUrl: connection.ComicIssueSiteDetailUrl)));
+      _issues[hop.Issue.ComicVineId] = hop.Issue with { PathUseCount = hop.Issue.PathUseCount + 1 };
     }
-
-    return new Path(characters, hops);
   }
 
   private async Task<Path> ReconstructPathAsync(int endingCharacterId,

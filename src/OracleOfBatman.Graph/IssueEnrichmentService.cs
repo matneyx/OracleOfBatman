@@ -20,8 +20,9 @@ public class IssueEnrichmentService(IComicVineIssueSource issueSource, IGraphSto
 
       // update incoming issue
       issue.Name ??= sourceIssue.Name;
-      issue.ImageUrl ??= sourceIssue.Image.IconUrl;
+      issue.ImageUrl ??= sourceIssue.Image?.IconUrl;
       issue.SiteDetailUrl ??= sourceIssue.SiteDetailUrl;
+      issue.CharacterCredits = [.. sourceIssue.CharacterCredits.Select(c => c.Id)];
 
       if (sourceIssue.Volume != null)
       {
@@ -34,7 +35,7 @@ public class IssueEnrichmentService(IComicVineIssueSource issueSource, IGraphSto
 
       return issue;
     }
-    catch
+    catch(HttpRequestException _) // TODO: Log this if we ever go live
     {
       return issue;
     }

@@ -22,6 +22,10 @@
         <CharacterCard Character="context"/>
       </ItemTemplate>
     </MudAutocomplete>
+    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => PickRandomCharacterAsync(true))"
+               data-testid="random-a-button">
+      Random
+    </MudButton>
   </MudItem>
   <MudItem xs="12" sm="5">
     <MudAutocomplete T="Character" Label="Character B" @bind-Value="_characterB"
@@ -31,6 +35,10 @@
         <CharacterCard Character="context"/>
       </ItemTemplate>
     </MudAutocomplete>
+    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => PickRandomCharacterAsync(false))"
+               data-testid="random-b-button">
+      Random
+    </MudButton>
   </MudItem>
   <MudItem xs="12" sm="2" Class="d-flex align-center">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
@@ -156,12 +164,6 @@
     _characterB = batman;
 
     _connectionCrawler?.CharacterAdded += CharacterAdded;
-    _connectionCrawler?.IssueConnectionConfirmed += IssueConnectionConfirmed;
-  }
-
-  private void IssueConnectionConfirmed(Issue obj)
-  {
-    Snackbar.Add($"Confirmed connection to {obj.ToDisplayName()}", Severity.Success);
   }
 
   private void CharacterAdded(Character obj)
@@ -182,7 +184,7 @@
   private static string CharacterName(Character? character) => character?.Name ?? string.Empty;
 
   private static Character ToCharacter(ComicVineSearchCharacterResult result) =>
-    new(result.Id, result.Name, result.Image?.IconUrl, result.SiteDetailUrl);
+    new(result.Id, result.Name, imageUrl: result.Image?.IconUrl, siteDetailUrl: result.SiteDetailUrl);
 
   private async Task FindPathAsync()
   {
@@ -250,6 +252,7 @@
     {
       var enrichedIssue = await _issueEnrichmentService.EnrichIfNeededAsync(hop.Issue);
       enrichedHops.Add(new Hop(hop.From, hop.To, enrichedIssue));
+      Snackbar.Add($"Connected via {enrichedIssue.ToDisplayName()}", Severity.Success);
     }
 
     _path = _path with { Hops = enrichedHops };
@@ -297,9 +300,7 @@
     {
       // Ensures the character is fully persisted and connected to the rest of the graph
       // (ADR-0012's overlap check), not just referenced by name.
-      var ingested = _connectionCrawler is not null
-        ? await _connectionCrawler.IngestCharacterAsync(result.Id)
-        : await _comicVineCharacterSource.GetCharacterAsync(result.Id);
+      var ingested = await _connectionCrawler.IngestCharacterAsync(result.Id);
       var domainCharacter = ingested.ToDomain();
 
       if (forCharacterA)
@@ -328,11 +329,23 @@
     }
   }
 
+  private async Task PickRandomCharacterAsync(bool forCharacterA)
+  {
+    if (_connectionCrawler is null) return;
+
+    var excludeId = forCharacterA ? _characterB?.ComicVineId : _characterA?.ComicVineId;
+    var picked = await _connectionCrawler.PickRandomCharacterAsync(excludeId);
+
+    if (picked is null) return;
+
+    if (forCharacterA) _characterA = picked;
+    else _characterB = picked;
+  }
+
   public void Dispose()
   {
     Snackbar?.Dispose();
 
     _connectionCrawler?.CharacterAdded -= CharacterAdded;
-    _connectionCrawler?.IssueConnectionConfirmed -= IssueConnectionConfirmed;
   }
 }

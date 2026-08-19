@@ -83,8 +83,8 @@ public sealed class CharacterSearchTests : IAsyncLifetime
   [Fact]
   public async Task SearchCharacters_ReturnsImageUrlAndSiteDetailUrl()
   {
-    await _writer.UpsertCharacterAsync(new Character(176719, "Soft Serve", "https://example.com/soft-serve-icon.jpg",
-      "https://comicvine.gamespot.com/soft-serve/4005-176719/"));
+    await _writer.UpsertCharacterAsync(new Character(176719, "Soft Serve", imageUrl: "https://example.com/soft-serve-icon.jpg",
+      siteDetailUrl: "https://comicvine.gamespot.com/soft-serve/4005-176719/"));
 
     var results = await _writer.SearchCharactersAsync("soft");
 

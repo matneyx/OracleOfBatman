@@ -33,7 +33,7 @@ public class HopTests
     var beast = new Character(15694, "Beast");
 
     var hop = new Hop(softServe, beast,
-      new Issue(111, "Some Issue", SiteDetailUrl: "https://comicvine.gamespot.com/some-issue/4000-111/"));
+      new Issue(111, "Some Issue", siteDetailUrl: "https://comicvine.gamespot.com/some-issue/4000-111/"));
 
     Assert.Equal("Some Issue", hop.Issue.Name);
     Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-111/", hop.Issue.SiteDetailUrl);

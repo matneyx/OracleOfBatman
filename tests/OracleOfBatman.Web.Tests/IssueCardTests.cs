@@ -15,8 +15,8 @@ public class IssueCardTests : BunitContext
   [Fact]
   public void RendersNameAsALink_WhenSiteDetailUrlIsPresent()
   {
-    var issue = new Issue(1, "Spoonful of Everything – Part 2!", null,
-      "https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/");
+    var issue = new Issue(1, "Spoonful of Everything – Part 2!", imageUrl: null,
+      siteDetailUrl: "https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/");
 
     var cut = Render<IssueCard>(p => p
       .Add(c => c.Issue, issue));
@@ -43,7 +43,7 @@ public class IssueCardTests : BunitContext
   [Fact]
   public void RendersAnAvatarImage_WhenImageUrlIsPresent()
   {
-    var issue = new Issue(1, string.Empty, "https://example.com/issue.jpg");
+    var issue = new Issue(1, string.Empty, imageUrl: "https://example.com/issue.jpg");
 
     var cut = Render<IssueCard>(p => p.Add(c => c.Issue, issue));
 
@@ -56,7 +56,7 @@ public class IssueCardTests : BunitContext
   [InlineData("https://comicvine.gamespot.com/its-jeff-infinity-comic-45-spoonful-of-everything-/4000-1101757/")]
   public void NameElementHasATestId_RegardlessOfWhetherItsALinkOrPlainText(string? siteDetailUrl)
   {
-    var issue = new Issue(1, "Spoonful of Everything – Part 2!", null, siteDetailUrl);
+    var issue = new Issue(1, "Spoonful of Everything – Part 2!", imageUrl: null, siteDetailUrl: siteDetailUrl);
 
     var cut = Render<IssueCard>(p => p
       .Add(c => c.Issue, issue));
@@ -67,7 +67,7 @@ public class IssueCardTests : BunitContext
   [Fact]
   public void AvatarElementHasATestId()
   {
-    var issue = new Issue(1, null, "https://example.com/issue.jpg");
+    var issue = new Issue(1, null, imageUrl: "https://example.com/issue.jpg");
 
     var cut = Render<IssueCard>(p => p.Add(c => c.Issue, issue));
 
@@ -79,8 +79,8 @@ public class IssueCardTests : BunitContext
   {
     // ADR-0015: always show the Volume once known, via Issue.ToDisplayName() — not the
     // raw Name alone.
-    var issue = new Issue(1, "Spoonful of Everything – Part 2!", VolumeId: 9,
-      VolumeName: "It's Jeff Infinity Comic");
+    var issue = new Issue(1, "Spoonful of Everything – Part 2!", volumeId: 9,
+      volumeName: "It's Jeff Infinity Comic");
 
     var cut = Render<IssueCard>(p => p.Add(c => c.Issue, issue));
 

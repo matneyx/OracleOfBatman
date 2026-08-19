@@ -16,7 +16,7 @@ public class IssueEnrichmentServiceTests
   [Fact]
   public async Task EnrichIfNeededAsync_ReturnsIssueUnchanged_WhenImageUrlAlreadyKnown()
   {
-    var issue = new Issue(500, "Some Issue", "https://example.com/already-known.jpg");
+    var issue = new Issue(500, "Some Issue", imageUrl: "https://example.com/already-known.jpg");
     var issueSource = new FakeComicVineIssueSource([]);
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
@@ -117,6 +117,33 @@ public class IssueEnrichmentServiceTests
 
     Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-500/", result.SiteDetailUrl);
     Assert.Equal("The Volume Title", result.VolumeName);
+  }
+
+  [Fact]
+  public async Task EnrichIfNeededAsync_PopulatesCharacterCredits_FromTheFetchedCast()
+  {
+    // ADR-0016: the raw Comic Vine cast list, free on the same enrichment fetch —
+    // used later for crawl-frontier discovery (ADR-0014's strong-candidate rule)
+    // without ever needing a Comic Vine request just to notice a candidate.
+    var issue = new Issue(500, "Some Issue");
+    var comicVineIssue = new ComicVineIssue
+    {
+      Id = 500,
+      Name = "Some Issue",
+      Image = new ComicVineImage { IconUrl = "https://example.com/cover.jpg" },
+      CharacterCredits =
+      [
+        new ComicVineCharacterRef { Id = 12605, Name = "Jim Hammond" },
+        new ComicVineCharacterRef { Id = 157242, Name = "Jeff the Land Shark" }
+      ]
+    };
+    var issueSource = new FakeComicVineIssueSource(new Dictionary<int, ComicVineIssue> { [500] = comicVineIssue });
+    var graphStore = new FakeGraphStore();
+    var service = new IssueEnrichmentService(issueSource, graphStore);
+
+    var result = await service.EnrichIfNeededAsync(issue);
+
+    Assert.Equal([12605, 157242], result.CharacterCredits);
   }
 
   [Fact]

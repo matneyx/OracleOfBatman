@@ -7,7 +7,7 @@ public class IssueDisplayTests
     [Fact]
     public void ToDisplayName_CombinesVolumeAndName_WhenBothArePresent()
     {
-        var issue = new Issue(1, "Spoonful of Everything – Part 2!", VolumeId: 9, VolumeName: "It's Jeff Infinity Comic");
+        var issue = new Issue(1, "Spoonful of Everything – Part 2!", volumeId: 9, volumeName: "It's Jeff Infinity Comic");
 
         Assert.Equal("It's Jeff Infinity Comic: Spoonful of Everything – Part 2!", issue.ToDisplayName());
     }
@@ -17,7 +17,7 @@ public class IssueDisplayTests
     [InlineData("")]
     public void ToDisplayName_ShowsVolumeAlone_WhenNameIsBlank(string? blankName)
     {
-        var issue = new Issue(1, blankName, VolumeId: 9, VolumeName: "It's Jeff Infinity Comic");
+        var issue = new Issue(1, blankName, volumeId: 9, volumeName: "It's Jeff Infinity Comic");
 
         Assert.Equal("It's Jeff Infinity Comic", issue.ToDisplayName());
     }
@@ -45,7 +45,7 @@ public class IssueDisplayTests
     {
         // "TPB" needs no special-casing (ADR-0015) — it's just a normal Name value that
         // gets combined with the Volume the same as any other.
-        var issue = new Issue(1, "TPB", VolumeId: 9, VolumeName: "It's Jeff Infinity Comic");
+        var issue = new Issue(1, "TPB", volumeId: 9, volumeName: "It's Jeff Infinity Comic");
 
         Assert.Equal("It's Jeff Infinity Comic: TPB", issue.ToDisplayName());
     }

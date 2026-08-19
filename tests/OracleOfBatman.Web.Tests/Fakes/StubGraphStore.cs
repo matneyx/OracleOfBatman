@@ -17,24 +17,21 @@ public sealed class StubGraphStore(Character? characterToReturn = null) : IGraph
   public Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth) =>
     Task.FromResult<Path?>(null);
 
+  public async Task RecordSeedUseAsync(int characterAComicVineId, int characterBComicVineId) => throw new NotImplementedException();
+
   public Task UpsertCharacterAsync(Character character) => Task.CompletedTask;
 
   public Task<Character?> GetCharacterAsync(int comicVineId) =>
     Task.FromResult(characterToReturn?.ComicVineId == comicVineId ? characterToReturn : null);
 
+  public async Task UpsertCreditedInAsync(int comicVineCharacterId, IReadOnlyList<Issue> issueCredits) => throw new NotImplementedException();
+
   public Task<Issue?> GetIssueAsync(int comicVineId) => Task.FromResult<Issue?>(null);
 
   public Task UpsertIssueAsync(Issue issue) => Task.CompletedTask;
 
-  public Task UpsertCharacterIssueCreditsAsync(int comicVineCharacterId, IReadOnlyList<int> issueCreditIds)
-    => Task.CompletedTask;
-
-  public Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> FindOverlappingIssuesAsync(int comicVineCharacterId,
-    IReadOnlyList<int> issueCreditIds) =>
-    Task.FromResult<IReadOnlyDictionary<int, IReadOnlyList<int>>>(new Dictionary<int, IReadOnlyList<int>>());
-
-  public Task UpsertConnectionAsync(Connection connection) => Task.CompletedTask;
-
   public Task<IReadOnlyList<Character>> SearchCharactersAsync(string query, int limit = 20) =>
     Task.FromResult<IReadOnlyList<Character>>([]);
+
+  public async Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds) => throw new NotImplementedException();
 }

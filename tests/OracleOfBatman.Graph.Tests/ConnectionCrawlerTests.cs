@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using OracleOfBatman.Domain;
 using OracleOfBatman.Graph.ComicVine;
 using OracleOfBatman.Graph.Tests.Fakes;
@@ -28,13 +29,12 @@ public class ConnectionCrawlerTests
   [Fact]
   public async Task AlreadyConnected_ReturnsImmediatelyWithoutFetchingAnything()
   {
-    // ADR-0015 Slice 5: PathExistsAsync is array-based now — the seeds must already
-    // share a materialized issue, not a CONNECTION edge.
+    // ADR-0016: the seeds must already share a CREDITED_IN-connected Issue.
     var graphStore = new FakeGraphStore();
     await graphStore.UpsertCharacterAsync(new Character(SeedA, "A"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(SeedA, [999]);
+    await graphStore.UpsertCreditedInAsync(SeedA, [new Issue(999, "Issue999")]);
     await graphStore.UpsertCharacterAsync(new Character(SeedB, "B"));
-    await graphStore.FindOverlappingIssuesAsync(SeedB, [999]);
+    await graphStore.UpsertCreditedInAsync(SeedB, [new Issue(999, "Issue999")]);
     var characterSource = new FakeComicVineCharacterSource([]);
     var crawler = new ConnectionCrawler(characterSource, graphStore);
 
@@ -61,9 +61,6 @@ public class ConnectionCrawlerTests
 
     Assert.True(result.Connected);
     Assert.NotNull(await graphStore.GetIssueAsync(500));
-    // ADR-0015 Slice 4: Same Issue no longer writes CONNECTION edges at all — the
-    // materialized Issue node above is now the sole record of this connectivity.
-    Assert.Empty(graphStore.Connections);
     Assert.Equal([SeedA, SeedB], characterSource.FetchedIds);
   }
 
@@ -87,7 +84,6 @@ public class ConnectionCrawlerTests
     Assert.Equal(1, result.CharactersFetched);
     Assert.NotNull(await graphStore.GetIssueAsync(100));
     Assert.NotNull(await graphStore.GetIssueAsync(200));
-    Assert.Empty(graphStore.Connections);
     Assert.Equal([SeedA, SeedB, sharedFriend], characterSource.FetchedIds);
   }
 
@@ -180,7 +176,7 @@ public class ConnectionCrawlerTests
     var graphStore = new FakeGraphStore();
     // Simulates a character already persisted by some earlier, unrelated crawl.
     await graphStore.UpsertCharacterAsync(new Character(earlierRunCharacter, "EarlierRunCharacter"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(earlierRunCharacter, [555]);
+    await graphStore.UpsertCreditedInAsync(earlierRunCharacter, [new Issue(555, "Issue555")]);
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = new ConnectionCrawler(characterSource, graphStore);
 
@@ -188,7 +184,7 @@ public class ConnectionCrawlerTests
 
     Assert.DoesNotContain(earlierRunCharacter, characterSource.FetchedIds);
     Assert.NotNull(await graphStore.GetIssueAsync(555));
-    Assert.Equal([fromA, earlierRunCharacter], graphStore.IssueCharacterCredits[555].OrderBy(id => id));
+    Assert.True(await graphStore.PathExistsAsync(fromA, earlierRunCharacter));
   }
 
   [Fact]
@@ -221,7 +217,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     await graphStore.UpsertCharacterAsync(new Character(alreadyKnownId, "AlreadyKnown"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(alreadyKnownId, [700]);
+    await graphStore.UpsertCreditedInAsync(alreadyKnownId, [new Issue(700, "Issue700")]);
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = new ConnectionCrawler(characterSource, graphStore);
 
@@ -230,7 +226,7 @@ public class ConnectionCrawlerTests
     Assert.Equal("New", ingested.Name);
     Assert.Contains(graphStore.Characters, c => c.ComicVineId == newCharacterId);
     Assert.NotNull(await graphStore.GetIssueAsync(700));
-    Assert.Equal([newCharacterId, alreadyKnownId], graphStore.IssueCharacterCredits[700].OrderBy(id => id));
+    Assert.True(await graphStore.PathExistsAsync(newCharacterId, alreadyKnownId));
   }
 
   [Fact]
@@ -267,113 +263,125 @@ public class ConnectionCrawlerTests
     Assert.False(raised);
   }
 
+
   [Fact]
-  public async Task IngestCharacterAsync_RaisesIssueConnectionConfirmedEvent_ForEachSharedIssueFound()
+  public async Task IngestCharacterAsync_PersistsFriendAndEnemyIds()
   {
-    const int newCharacterId = 42;
-    const int alreadyKnownId = 999;
+    // Free on the same Comic Vine response (ADR-0016) — discovery-only, never a path segment.
     var characters = new Dictionary<int, ComicVineCharacter>
     {
-      [newCharacterId] = new()
-      {
-        Id = newCharacterId,
-        Name = "New",
-        IssueCredits = [new ComicVineIssueRef { Id = 700, Name = "Some Issue" }]
-      }
+      [42] = Character(42, "New", friends: [10, 20], enemies: [30])
     };
     var graphStore = new FakeGraphStore();
-    await graphStore.UpsertCharacterAsync(new Character(alreadyKnownId, "AlreadyKnown"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(alreadyKnownId, [700]);
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = new ConnectionCrawler(characterSource, graphStore);
-    var confirmedIssues = new List<Issue>();
-    crawler.IssueConnectionConfirmed += confirmedIssues.Add;
-
-    await crawler.IngestCharacterAsync(newCharacterId);
-
-    var confirmed = Assert.Single(confirmedIssues);
-    Assert.Equal(700, confirmed.ComicVineId);
-    Assert.Equal("Some Issue", confirmed.Name);
-  }
-
-  [Fact]
-  public async Task IngestCharacterAsync_DoesNotRaiseIssueConnectionConfirmedEvent_WhenNoOverlapExists()
-  {
-    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "Solo", issues: [111]) };
-    var graphStore = new FakeGraphStore();
-    var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
-    var raised = false;
-    crawler.IssueConnectionConfirmed += _ => raised = true;
 
     await crawler.IngestCharacterAsync(42);
 
-    Assert.False(raised);
+    var found = await graphStore.GetCharacterAsync(42);
+    Assert.Equal([10, 20], found!.FriendIds);
+    Assert.Equal([30], found.EnemyIds);
   }
 
   [Fact]
-  public async Task PersistCharacterAsync_PersistsTheCharacterAndIssueCredits_WithoutCheckingForOverlaps()
-  {
-    // New UX: picking a character from Comic Vine search shouldn't materialize Issues
-    // yet — that only happens once the user actually tries to make a connection
-    // (Go / "Try to find a connection"), not as a side effect of just adding a
-    // character to the graph.
-    const int newCharacterId = 42;
-    const int alreadyKnownId = 999;
-    var characters = new Dictionary<int, ComicVineCharacter>
-    {
-      [newCharacterId] = Character(newCharacterId, "New", issues: [700])
-    };
-    var graphStore = new FakeGraphStore();
-    await graphStore.UpsertCharacterAsync(new Character(alreadyKnownId, "AlreadyKnown"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(alreadyKnownId, [700]);
-    var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
-
-    var persisted = await crawler.PersistCharacterAsync(newCharacterId);
-
-    Assert.Equal("New", persisted.Name);
-    Assert.Contains(graphStore.Characters, c => c.ComicVineId == newCharacterId);
-    // The real point of this test: 700 is shared with an already-known character, but
-    // no overlap check has run — nothing should be materialized yet.
-    Assert.Null(await graphStore.GetIssueAsync(700));
-  }
-
-  [Fact]
-  public async Task PersistCharacterAsync_RaisesCharacterAddedEvent_WhenTheCharacterIsNewToTheGraph()
+  public async Task IngestCharacterAsync_StampsIngestionDateTime_UsingTheInjectedTimeProvider()
   {
     var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "New") };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
-    Character? addedCharacter = null;
-    crawler.CharacterAdded += c => addedCharacter = c;
+    var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
+    var crawler = new ConnectionCrawler(characterSource, graphStore, timeProvider);
 
-    await crawler.PersistCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42);
 
-    Assert.NotNull(addedCharacter);
-    Assert.Equal(42, addedCharacter.ComicVineId);
+    var found = await graphStore.GetCharacterAsync(42);
+    Assert.Equal(new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc), found!.IngestionDateTime);
   }
 
   [Fact]
-  public async Task PersistCharacterAsync_NeverRaisesIssueConnectionConfirmedEvent()
+  public async Task IngestCharacterAsync_UpdatesIngestionDateTime_OnReIngest()
   {
-    const int newCharacterId = 42;
-    const int alreadyKnownId = 999;
-    var characters = new Dictionary<int, ComicVineCharacter>
-    {
-      [newCharacterId] = Character(newCharacterId, "New", issues: [700])
-    };
+    // The Random Character feature (ADR-0016) depends on re-ingesting a seed bumping this
+    // timestamp forward, not just setting it once on first ingest.
+    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "New") };
     var graphStore = new FakeGraphStore();
-    await graphStore.UpsertCharacterAsync(new Character(alreadyKnownId, "AlreadyKnown"));
-    await graphStore.UpsertCharacterIssueCreditsAsync(alreadyKnownId, [700]);
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
-    var raised = false;
-    crawler.IssueConnectionConfirmed += _ => raised = true;
+    var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
+    var crawler = new ConnectionCrawler(characterSource, graphStore, timeProvider);
+    await crawler.IngestCharacterAsync(42);
 
-    await crawler.PersistCharacterAsync(newCharacterId);
+    timeProvider.SetUtcNow(new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero));
+    await crawler.IngestCharacterAsync(42);
 
-    Assert.False(raised);
+    var found = await graphStore.GetCharacterAsync(42);
+    Assert.Equal(new DateTime(2026, 8, 11, 9, 0, 0, DateTimeKind.Utc), found!.IngestionDateTime);
+  }
+
+  [Fact]
+  public async Task PickRandomCharacterAsync_ReturnsLeastRecentlyIngestedCharacter()
+  {
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(1, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(2, "B",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+
+    var picked = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+
+    Assert.Equal(1, picked!.ComicVineId);
+  }
+
+  [Fact]
+  public async Task PickRandomCharacterAsync_ExcludesTheOtherSlotsCharacter()
+  {
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(1, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(2, "B",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+
+    var picked = await crawler.PickRandomCharacterAsync(excludeCharacterId: 1);
+
+    Assert.Equal(2, picked!.ComicVineId);
+  }
+
+  [Fact]
+  public async Task PickRandomCharacterAsync_ExcludesPreviouslyShownCharacters_AcrossMultipleCalls()
+  {
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(1, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(2, "B",
+      ingestionDateTime: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(3, "C",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+
+    var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+    var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+
+    Assert.Equal(1, first!.ComicVineId);
+    Assert.Equal(2, second!.ComicVineId);
+  }
+
+  [Fact]
+  public async Task PickRandomCharacterAsync_ResetsShownSet_OnceEveryCandidateHasBeenShown()
+  {
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(1, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(2, "B",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+
+    var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+    var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+    var third = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+
+    Assert.Equal(1, first!.ComicVineId);
+    Assert.Equal(2, second!.ComicVineId);
+    Assert.Equal(1, third!.ComicVineId);
   }
 }

@@ -10,6 +10,16 @@ and pathfinding approach specifically; ADR-0013's problem statement,
 "Same Issue becomes structural," and "keep `Connection` for future tiers"
 all still hold. Also refines ADR-0014's escalation ladder.
 
+> **Superseded by ADR-0016.** The perf problem this ADR accepted as a
+> tradeoff (arrays over edges, to store less data) turned out to make
+> pathfinding too slow for high-credit Characters (Batman, Deadpool) in
+> practice. ADR-0016 reverts to real, eager `CREDITED_IN` edges — this
+> ADR's "keep `Connection` for future tiers" line does not survive either;
+> ADR-0016 retires `Connection` entirely. `Issue.character_credits`
+> survives in spirit but changes meaning (raw Comic Vine cast list,
+> populated at enrichment rather than confirmed-overlap time) — read
+> ADR-0016 for the current plan.
+
 Reached by grilling through a half-forced, ad-hoc start on ADR-0013 — the
 user had already added an `Issue` Domain record and reshaped `Hop` to
 carry it before this ADR existed; this document is the design the

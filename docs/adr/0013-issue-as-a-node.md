@@ -8,14 +8,15 @@ Design-only ADR — the decisions below are not yet implemented. A future
 ticket builds them, matching how ADR-0010 designed the crawl algorithm
 before MVP ticket 4 built it.
 
-> **Superseded in part by ADR-0015.** The problem statement, "Same Issue
-> becomes structural," and "keep Connection for future tiers" below are
-> still accurate. The specific storage mechanism (`CREDITED_IN` edges) and
-> the Bacon-Number pathfinding Cypher are not — ADR-0015 replaces edges
-> with mirrored array properties (`Character.issue_credits` /
-> `Issue.character_credits`), lazily materialized only on confirmed
-> overlap, and moves pathfinding from a single Cypher `shortestPath()`
-> query to an application-level BFS. Read ADR-0015 for the current plan.
+> **Superseded in part by ADR-0015, then ADR-0016.** The problem
+> statement and "Same Issue becomes structural" below are still accurate.
+> ADR-0015 briefly replaced `CREDITED_IN` edges with mirrored array
+> properties; ADR-0016 reverts back to real, eager `CREDITED_IN` edges —
+> effectively this ADR's original storage mechanism, restored — but drops
+> the "keep Connection for future tiers" line below: ADR-0016 retires
+> `Connection`/`UpsertConnectionAsync` entirely, on the reasoning that a
+> future Interaction Tier system belongs on the `CREDITED_IN` edge itself
+> rather than a parallel edge type. Read ADR-0016 for the current plan.
 
 ## Problem
 

@@ -13,8 +13,10 @@ public sealed record CrawlResult(bool Connected, int CharactersFetched);
 /// </summary>
 public sealed class ConnectionCrawler(
   IComicVineCharacterSource characterSource,
-  IGraphStore graphStore)
+  IGraphStore graphStore,
+  TimeProvider? timeProvider = null)
 {
+  private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
   private readonly Queue<int> _frontierA = [];
   private readonly Queue<int> _frontierB = [];
   private readonly HashSet<int> _visited = [];
@@ -142,27 +144,16 @@ public sealed class ConnectionCrawler(
     var character = await characterSource.GetCharacterAsync(comicVineId);
     _visited.Add(comicVineId);
 
+    var domainCharacter = character.ToDomain() with { IngestionDateTime = _timeProvider.GetUtcNow().UtcDateTime };
     var isNewCharacter = await graphStore.GetCharacterAsync(comicVineId) is null;
-    await graphStore.UpsertCharacterAsync(character.ToDomain());
+    await graphStore.UpsertCharacterAsync(domainCharacter);
     if (isNewCharacter)
     {
-      CharacterAdded?.Invoke(character.ToDomain());
+      CharacterAdded?.Invoke(domainCharacter);
     }
 
-    var issueCreditIds = character.IssueCredits.Select(i => i.Id).ToList();
-    await graphStore.UpsertCharacterIssueCreditsAsync(comicVineId, issueCreditIds);
-
-    var overlaps = await graphStore.FindOverlappingIssuesAsync(comicVineId, issueCreditIds);
-    if(overlaps.Any() && overlaps.Values.Any())
-    {
-        var allUniqueIssueIds = overlaps.Values.SelectMany(i => i).ToHashSet();
-
-        foreach (var issueId in allUniqueIssueIds)
-        {
-          var issueRef = character.IssueCredits.First(i => i.Id == issueId);
-          IssueConnectionConfirmed?.Invoke(new Issue(issueId, issueRef.Name, SiteDetailUrl: issueRef.SiteDetailUrl));
-        }
-    }
+    await graphStore.UpsertCreditedInAsync(comicVineId,
+      character.IssueCredits.Select(i => new Issue(i.Id, i.Name, siteDetailUrl: i.SiteDetailUrl)).ToList());
 
     return character;
   }
@@ -174,5 +165,29 @@ public sealed class ConnectionCrawler(
   }
 
   public event Action<Character>? CharacterAdded;
-  public event Action<Issue>? IssueConnectionConfirmed;
+
+  private readonly HashSet<int> _shownViaRandom = [];
+
+  public async Task<Character?> PickRandomCharacterAsync(int? excludeCharacterId)
+  {
+    var excludeIds = new HashSet<int>(_shownViaRandom);
+    if (excludeCharacterId is int id) excludeIds.Add(id);
+
+    var picked = await graphStore.GetLeastRecentlyIngestedCharacterAsync(excludeIds);
+
+    if (picked is null && _shownViaRandom.Count > 0)
+    {
+      // Everyone's been shown — start the rotation over.
+      _shownViaRandom.Clear();
+      var retryExcludeIds = excludeCharacterId is int retryId ? new HashSet<int> { retryId } : [];
+      picked = await graphStore.GetLeastRecentlyIngestedCharacterAsync(retryExcludeIds);
+    }
+
+    if (picked is not null)
+    {
+      _shownViaRandom.Add(picked.ComicVineId);
+    }
+
+    return picked;
+  }
 }

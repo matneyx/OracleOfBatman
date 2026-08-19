@@ -54,26 +54,47 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
 
 ## Ingestion
 
-- **Model Issue (and Team) as first-class Domain types/Neo4j nodes**
-  (ADR-0013/0014/0015, designed not yet built) — replaces pairwise
-  per-issue `CONNECTION` edges (O(N²) for an N-Character issue) with
-  mirrored array properties (`Character.issue_credits` /
-  `Issue.character_credits`, ADR-0015 — supersedes ADR-0013's original
-  `CREDITED_IN` edge proposal), making a Same Issue connection a
-  structural fact rather than a written record, lazily materialized only
-  once two already-ingested Characters are confirmed to share an Issue.
-  `Team` gets the same treatment for the crawl's own discovery use (never
-  a Connection/Path segment itself). Includes a simplified live-data
-  migration (existing `CONNECTION` data can just be dropped — Character
-  data and its `issue_credits` arrays are fine as the fresh starting
-  point), a unified Issue-enrichment fetch (image/Volume/name together,
-  triggered on render), and an escalating friends/enemies/teams-BFS-then-
-  issue/team-cast-discovery crawl algorithm. Pathfinding moves from a
-  single Cypher `shortestPath()` query to an application-level BFS, since
-  arrays aren't traversable edges — an accepted tradeoff for storing less
-  data. Not scheduled — a real chunk of work across the crawl, the
-  writer, and the path query, deliberately deferred rather than rushed
-  alongside other changes.
+- **Build ADR-0014's issue-cast escalation step (Team deferred)** — next
+  up, scoped down: `PopulateConnectionsAsync` still only does ADR-0010's
+  basic friends/enemies BFS; `Issue.character_credits` (just wired up) is
+  captured but nothing consumes it yet. When the BFS exhausts its budget
+  with no connection found, escalate to fetching full `/issue/{id}/` casts
+  for the frontier's issues and check `character_credits` for strong
+  candidates (2+ appearances, ADR-0014). Refinement over ADR-0014's
+  original rule, decided but not yet built: if nobody hits the 2+
+  threshold, fall back to weaker (1+) candidates rather than giving up
+  outright. Team-side escalation (team rosters, `MEMBER_OF`) explicitly
+  deferred — Team isn't a node yet at all (see below).
+- **Model Team as a first-class Domain type/Neo4j node** (ADR-0014,
+  designed not yet built) — same `MEMBER_OF` treatment `CREDITED_IN` got
+  in ADR-0016: a Character's team memberships become real edges, used by
+  the crawl's frontier-expansion/strong-candidate discovery (ADR-0014),
+  never a Connection/Path segment itself. The Issue-as-node half of this
+  original proposal is done (ADR-0016); Team is the remaining piece.
+- **Detect provably-unreachable Character pairs** — e.g. every one of a
+  Character's friends/enemies/teams/issue-credits already known to live in
+  a completely un-crossed-over universe/imprint, so no amount of budget
+  will ever find a path. Distinct from the existing best-effort cutoff
+  (ADR-0014's escalation ladder gives up once its budget runs out, not
+  because it proved impossibility) — calling this out with confidence
+  needs some notion of a "universe"/imprint boundary in the data to reason
+  about, which isn't modeled at all today (see `CONTEXT.md`'s Universe
+  concept, unused until the MVP's single-publisher scope expands).
+- **"Include Creators" option** — an opt-in that lets a Path also connect
+  through shared writers/artists, not just co-credited Characters. Direct
+  answer to the bullet above: two Characters can be genuinely
+  un-crossed-over at the fictional-universe level yet still connect in
+  the real world through a creator who worked on both — this is also
+  plausibly how the Snoopy → Snoop Dogg query (the "Open questions"
+  section below) actually resolves, if Mad Magazine's creator overlap
+  turns out to matter more than its parody content does. Comic Vine's
+  issue response already includes `person_credits`, so the raw data is
+  there for free (same pattern as `character_friends`/`teams`). Bigger
+  design question than it looks: is a shared creator a Same-Issue-strength
+  Connection, or a distinct, weaker tier (someone can write two wildly
+  different Characters without them ever "meeting")? Likely ties into the
+  deferred multi-tier Interaction Tier system and Minimum Canonicity
+  control (ADR-0008, `docs/UI.md`) rather than being a bolt-on toggle.
 - Live, *automatic* on-demand crawling on an API cache-miss (ADR-0005) —
   still deferred because it needs a background job/polling pattern rather
   than a blocking request, and risks exhausting Comic Vine's rate limit if
@@ -85,73 +106,18 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
   already-connected pair anyway, ignoring the "stop once connected" rule
   (ADR-0010), specifically hunting for a shorter path (ADR-0012's accepted
   partial-graph limitation). Not scheduled.
-- **Proposed: revert to real `Character-[:CREDITED_IN]->Issue` edges,
-  created eagerly at ingest time, superseding ADR-0015's array/lazy-
-  materialization/app-level-BFS mechanism** — under active discussion, not
-  decided (a grilling session was started and interrupted; resume it
-  before building any of this). Motivating problem: two popular
-  Characters with huge `issue_credits` arrays (e.g. Batman, Deadpool) take
-  a very long time to connect under Slice 5's app-level, multi-round-trip
-  BFS. Argument for reverting: ADR-0015 chose arrays over edges for two
-  reasons — avoiding wasted Comic Vine calls on issues nobody ends up
-  caring about, and storing less data by deferring node creation. The
-  first reason no longer holds now that Slice 6 fully decoupled Issue
-  *enrichment* (the Comic Vine fetch) from Issue *node existence* —
-  enrichment is already lazy and render-triggered regardless of whether
-  the bare node was created eagerly or lazily, so eager edges wouldn't
-  reintroduce the API-call cost arrays were partly chosen to avoid. The
-  second reason (raw storage volume) still applies and would need to be
-  explicitly accepted. Open questions identified but not yet resolved:
-  - Does lazy materialization go away entirely, or coexist with eager
-    edges somehow?
-  - Does this make the Connection-edge fast-path work from this same
-    session (caching successful Path hops as pairwise Character-Character
-    `:CONNECTION` edges, checked before falling back to array BFS —
-    RED tests exist, GREEN not yet written) redundant? Real
-    `CREDITED_IN` edges would let Neo4j's native `shortestPath()` do the
-    traversal directly, which may remove the need for a separate
-    Character-Character cache layer entirely.
-  - What happens to `Character.issue_credits`/`Issue.character_credits`,
-    `FindOverlappingIssuesAsync`, and the rest of the Slices 2-5 surface —
-    removed, or kept for something?
-  - Does existing local graph data (already in the array shape) need a
-    migration pass, or does it get dropped and rebuilt like ADR-0015's own
-    migration did?
-  - Given the project's convention of writing an ADR for every major
-    storage/pathfinding decision (0007 through 0015), this should get its
-    own ADR (0016) once decided, the same way ADR-0015 itself came out of
-    a grilling session.
-- **Ingestion/usage tracking** — also under discussion, not decided:
-  - `ingestion_date` on both `Character` and `Issue` nodes, updated every
-    time a Character gets (re-)ingested. Issues likely get it set once
-    (creation or first enrichment — not yet decided which) and never
-    refreshed, since issues aren't expected to be re-ingested the way a
-    Character can be (see `PersistCharacterAsync`/`IngestCharacterAsync`'s
-    always-refetch behavior from this same session).
-  - Three usage-frequency counters: how often a Character is used as one
-    of the two outermost/seed characters in a search, how often a
-    Character is used as an intermediate/connecting (bridging) character
-    in a found Path, and how often an Issue is used as a hop in a found
-    Path. Not yet decided where these increment (every successful
-    `FindShortestPathAsync`? only fresh crawls?) or what drives the need
-    for them beyond the Random Character idea below.
-  - A "Random Character" button that isn't actually random — it picks
-    whichever Character has the oldest `ingestion_date`, i.e. a disguised
-    "refresh the stalest data" mechanism. Depends entirely on
-    `ingestion_date` existing first.
-- Nightly refresh job — rate-limited, re-fetch every already-known
-  Character's current `issue_credits` (they may have gained new issue
-  credits since last checked), update the stored list, and re-run
-  `FindOverlappingIssuesAsync` (ADR-0012) against the whole graph to catch
-  connections that didn't exist yet at ingestion time. Builds directly on
-  ADR-0012's persisted `issue_credits` + overlap-query primitives — no new
-  Neo4j schema needed, just a scheduler. Scales linearly against Comic
-  Vine's 200/hour limit (one request per Character refreshed), so past a
-  couple hundred Characters a single nightly pass no longer fits in one
-  hour and refreshes would need to spread across a rolling window (e.g.
-  oldest-checked-first) rather than refreshing everyone every night. Not
-  scheduled — needs a job-scheduling decision (this project has no
-  scheduler yet) before it can be built.
+- Nightly refresh job — rate-limited, bulk version of the manual "Random
+  Character" button (ADR-0016): re-ingest already-known Characters
+  oldest-`ingestion_date_time`-first, re-fetching current friends/enemies/
+  issue credits and unconditionally re-`MERGE`ing `CREDITED_IN` edges to
+  catch new credits gained since last checked. No new Neo4j schema needed
+  — `IngestCharacterAsync` already does exactly this per-Character, just a
+  scheduler calling it in bulk. Scales linearly against Comic Vine's
+  200/hour limit (one request per Character refreshed), so past a couple
+  hundred Characters a single nightly pass no longer fits in one hour and
+  refreshes would need to spread across a rolling window rather than
+  refreshing everyone every night. Not scheduled — needs a job-scheduling
+  decision (this project has no scheduler yet) before it can be built.
 
 ## Frontend
 

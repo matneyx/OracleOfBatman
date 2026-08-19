@@ -6,8 +6,8 @@ using Path = OracleOfBatman.Domain.Path;
 namespace OracleOfBatman.Graph;
 
 /// <summary>
-///   Writes into the schema from ADR-0007:
-///   (:Character {comic_vine_id, name})-[:CONNECTION {comic_issue_id, tier, confidence, published_at}]->(:Character)
+///   Writes into the schema from ADR-0016:
+///   (:Character {comic_vine_id, name})-[:CREDITED_IN]->(:Issue {comic_vine_id, name})
 ///   Caller owns the driver's lifetime — this does not dispose it.
 /// </summary>
 public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : IGraphStore
@@ -15,64 +15,113 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
 
   public async Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId)
   {
-    var visited = new HashSet<int> { characterAComicVineId };
-    var queue = new Queue<int>();
-    queue.Enqueue(characterAComicVineId);
-
-    while (queue.Count > 0)
-    {
-      var current = queue.Dequeue();
-      var neighbors = await GetNeighborCharactersAsync(current);
-
-      foreach (var neighborId in neighbors.Keys)
-      {
-        if (neighborId == characterBComicVineId)
-        {
-          return true;
-        }
-
-        if (visited.Add(neighborId))
-        {
-          queue.Enqueue(neighborId);
-        }
-      }
-    }
-
-    return false;
+    await using var session = driver.AsyncSession(ConfigureSession);
+    var cursor = await session.RunAsync(
+      """
+      MATCH (a:Character {comic_vine_id: $aId}), (b:Character {comic_vine_id: $bId})
+      RETURN EXISTS { (a)-[:CREDITED_IN*]-(b) } AS pathExists
+      """,
+      new { aId = characterAComicVineId, bId = characterBComicVineId });
+    var record = await cursor.SingleOrDefaultAsync();
+    return record?["pathExists"].As<bool>() ?? false;
   }
 
   public async Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth)
   {
     Debug.Assert(maxDepth > 0, "maxDepth must be positive");
 
-    var visited = new HashSet<int> { characterAComicVineId };
-    var parent = new Dictionary<int, (int PreviousCharacterId, int IssueId)>();
-    var queue = new Queue<(int Id, int Depth)>();
-    queue.Enqueue((characterAComicVineId, 0));
-    visited.Add(characterAComicVineId);
+    await using var session = driver.AsyncSession(ConfigureSession);
+    var cursor = await session.RunAsync(
+      $"MATCH (a:Character {{comic_vine_id: $aId}}), (b:Character {{comic_vine_id: $bId}})" +
+      $"OPTIONAL MATCH p = shortestPath((a)-[:CREDITED_IN*..{maxDepth * 2}]-(b))" +
+      $"RETURN p"
+       ,
+      new { aId = characterAComicVineId, bId = characterBComicVineId });
 
-    while (queue.Count > 0)
+    var record = await cursor.SingleOrDefaultAsync();
+
+    if (record?["p"] is not IPath path)
     {
-      var (current, depth) = queue.Dequeue();
-      if (current == characterBComicVineId)
+      return null;
+    }
+
+    var nodes = path.Nodes.ToList();
+    var characters = new List<Character>();
+    var issues = new List<Issue>();
+
+    for (var i = 0; i < nodes.Count; i++)
+    {
+      if (i % 2 == 0)
       {
-        return await ReconstructPathAsync(characterBComicVineId, parent);
+        characters.Add(MapCharacter(nodes[i]));
       }
-
-      if (depth >= maxDepth) continue;
-
-      foreach (var (neighborId, issueId) in await GetNeighborCharactersAsync(current))
+      else
       {
-        if (visited.Add(neighborId))
-        {
-          parent[neighborId] = (current, issueId);
-          queue.Enqueue((neighborId, depth + 1));
-        }
+        issues.Add(MapIssue(nodes[i]));
       }
     }
 
-    return null;
+    var hops = issues.Select((t, i) => new Hop(characters[i], characters[i + 1], t)).ToList();
+
+    // Update usage count on bridge characters and issues
+    await session.ExecuteWriteAsync(async tx =>
+    {
+      var bridgeCursor = await tx.RunAsync(
+        """
+        UNWIND $bridgeIds AS bridgeId
+        MATCH (c:Character {comic_vine_id: bridgeId})
+        SET c.bridge_use_count = coalesce(c.bridge_use_count, 0) + 1
+        """,
+        new { bridgeIds = characters.Skip(1).SkipLast(1).Select(c => c.ComicVineId) });
+      await bridgeCursor.ConsumeAsync();
+
+      var issueCursor = await tx.RunAsync(
+        """
+        UNWIND $issueIds AS issueId
+        MATCH (i:Issue {comic_vine_id: issueId})
+        SET i.path_use_count = coalesce(i.path_use_count, 0) + 1
+        """,
+        new { issueIds = issues.Select(i => i.ComicVineId) });
+      await issueCursor.ConsumeAsync();
+    });
+
+    return new Path(characters, hops);
   }
+
+  public async Task RecordSeedUseAsync(int characterAComicVineId, int characterBComicVineId)
+  {
+    await using var session = driver.AsyncSession(ConfigureSession);
+    await session.ExecuteWriteAsync(async tx =>
+    {
+      await tx.RunAsync(
+        """
+        MATCH (a:Character {comic_vine_id: $aId}), (b:Character {comic_vine_id: $bId})
+        SET a.seed_use_count = coalesce(a.seed_use_count, 0) + 1,
+            b.seed_use_count = coalesce(b.seed_use_count, 0) + 1
+        """
+        ,
+        new { aId = characterAComicVineId, bId = characterBComicVineId });
+    });
+  }
+
+  private Issue MapIssue(INode node) => new(
+    node["comic_vine_id"].As<int>(),
+    node["name"].As<string>(),
+    imageUrl: GetOptionalProperty<string>(node, "image_url"),
+    siteDetailUrl: GetOptionalProperty<string>(node, "site_detail_url"),
+    volumeId: GetOptionalProperty<int>(node, "volume_id"),
+    volumeName: GetOptionalProperty<string>(node, "volume_name"));
+
+  private Character MapCharacter(INode node) => new(
+    node["comic_vine_id"].As<int>(),
+    node["name"].As<string>(),
+    imageUrl: GetOptionalProperty<string>(node, "image_url"),
+    siteDetailUrl: GetOptionalProperty<string>(node, "site_detail_url"));
+
+  private static T? GetOptionalProperty<T>(INode node, string propertyName)
+    => node.Properties.TryGetValue(propertyName, out var value)
+        ? value.As<T?>()
+        : default;
 
   public async Task UpsertCharacterAsync(Character character)
   {
@@ -86,12 +135,16 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
         MERGE (c:Character {comic_vine_id: $comicVineId})
         SET c.name = $name,
             c.image_url = coalesce($imageUrl, c.image_url),
-            c.site_detail_url = coalesce($siteDetailUrl, c.site_detail_url)
+            c.site_detail_url = coalesce($siteDetailUrl, c.site_detail_url),
+            c.friend_ids = $friendIds,
+            c.enemy_ids = $enemyIds,
+            c.ingestion_date_time = $ingestionDateTime
         """,
         new
         {
           comicVineId = character.ComicVineId, name = character.Name, imageUrl = character.ImageUrl,
-          siteDetailUrl = character.SiteDetailUrl
+          siteDetailUrl = character.SiteDetailUrl, friendIds = character.FriendIds, enemyIds = character.EnemyIds,
+          ingestionDateTime = character.IngestionDateTime
         });
       await cursor.ConsumeAsync();
     });
@@ -105,59 +158,44 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
     {
       var cursor = await tx.RunAsync(
         "MATCH (c:Character {comic_vine_id: $comicVineId})" +
-        "RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl",
+        "RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl, c.seed_use_count AS seedUseCount, c.bridge_use_count AS bridgeUseCount, c.friend_ids AS friendIds, c.enemy_ids AS enemyIds, c.ingestion_date_time AS ingestionDateTime",
         new { comicVineId });
 
       return await cursor
-        .Select(r => new Character(r["comicVineId"].As<int>(), r["name"].As<string>(), r["imageUrl"].As<string?>(),
-          r["siteDetailUrl"].As<string?>()))
+        .Select(r => new Character(r["comicVineId"].As<int>(),
+          r["name"].As<string>(),
+          imageUrl: r["imageUrl"].As<string?>(),
+          siteDetailUrl: r["siteDetailUrl"].As<string?>(),
+          seedUseCount: r["seedUseCount"]?.As<int>() ?? 0,
+          bridgeUseCount: r["bridgeUseCount"]?.As<int>() ?? 0,
+          friendIds: r["friendIds"] is null ? [] : [.. r["friendIds"].As<List<object>>().Select(v => v.As<int>())],
+          enemyIds: r["enemyIds"] is null ? [] : [.. r["enemyIds"].As<List<object>>().Select(v => v.As<int>())],
+          ingestionDateTime: r["ingestionDateTime"]?.As<DateTimeOffset>().UtcDateTime
+          ))
         .SingleOrDefaultAsync();
     });
   }
 
-  public async Task UpsertCharacterIssueCreditsAsync(int comicVineCharacterId, IReadOnlyList<int> issueCreditIds)
+  public async Task UpsertCreditedInAsync(int comicVineCharacterId, IReadOnlyList<Issue> issueCredits)
   {
     await using var session = driver.AsyncSession(ConfigureSession);
-    await session.ExecuteWriteAsync(async tx =>
-    {
-      var cursor = await tx.RunAsync(
-        "MATCH (c:Character {comic_vine_id: $comicVineId}) SET c.issue_credits = $issueCreditIds",
-        new { comicVineId = comicVineCharacterId, issueCreditIds = issueCreditIds.ToArray() });
-      await cursor.ConsumeAsync();
-    });
-  }
 
-  public async Task<IReadOnlyDictionary<int, IReadOnlyList<int>>> FindOverlappingIssuesAsync(int comicVineCharacterId,
-    IReadOnlyList<int> issueCreditIds)
-  {
-    await using var session = driver.AsyncSession(ConfigureSession);
-    return await session.ExecuteWriteAsync(async tx =>
+    foreach (var issue in issueCredits)
     {
-      var cursor = await tx.RunAsync(
-        """
-        UNWIND $issueCreditIds AS issueId
-        MATCH (other:Character)
-        WHERE other.comic_vine_id <> $comicVineId AND issueId IN other.issue_credits
-        MERGE (i:Issue {comic_vine_id: issueId})
-        WITH i, other, issueId
-        UNWIND (coalesce(i.character_credits, []) + [$comicVineId, other.comic_vine_id]) AS creditId
-        WITH i, other, issueId, collect(DISTINCT creditId) AS credits
-        SET i.character_credits = credits
-        RETURN other.comic_vine_id AS otherId, collect(DISTINCT issueId) AS sharedIssueIds
-        """,
-        new { comicVineId = comicVineCharacterId, issueCreditIds = issueCreditIds.ToArray() });
 
-      var records = await cursor.ToListAsync();
-      var result = new Dictionary<int, IReadOnlyList<int>>();
-      foreach (var record in records)
+      await session.ExecuteWriteAsync(async tx =>
       {
-        var otherId = record["otherId"].As<int>();
-        var sharedIssueIds = record["sharedIssueIds"].As<List<object>>().Select(v => v.As<int>()).ToList();
-        result[otherId] = sharedIssueIds;
-      }
-
-      return (IReadOnlyDictionary<int, IReadOnlyList<int>>)result;
-    });
+        var cursor = await tx.RunAsync(
+          """
+          MATCH (c:Character {comic_vine_id: $characterId})
+          MERGE (i:Issue {comic_vine_id: $issueId})
+            ON CREATE SET i.name = $name, i.site_detail_url = $siteDetailUrl
+          MERGE (c)-[:CREDITED_IN]->(i)
+          """,
+          new { characterId = comicVineCharacterId, issueId = issue.ComicVineId, name = issue.Name, siteDetailUrl = issue.SiteDetailUrl });
+        await cursor.ConsumeAsync();
+      });
+    }
   }
 
   public async Task<Issue?> GetIssueAsync(int comicVineId)
@@ -168,12 +206,19 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
     {
       var cursor = await tx.RunAsync(
         "MATCH (c:Issue {comic_vine_id: $comicVineId})" +
-        "RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl, c.volume_id AS volumeId, c.volume_name AS volumeName",
+        "RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl, c.volume_id AS volumeId, c.volume_name AS volumeName, c.path_use_count AS pathUseCount, c.character_credits AS characterCredits",
         new { comicVineId });
 
       return await cursor
-        .Select(r => new Issue(r["comicVineId"].As<int>(), r["name"].As<string>(), r["imageUrl"].As<string?>(),
-          r["siteDetailUrl"].As<string?>(), r["volumeId"]?.As<int>(), r["volumeName"]?.As<string?>()))
+        .Select(r => new Issue(r["comicVineId"].As<int>(),
+          r["name"].As<string>(),
+          imageUrl: r["imageUrl"].As<string?>(),
+          siteDetailUrl: r["siteDetailUrl"].As<string?>(),
+          volumeId: r["volumeId"]?.As<int>(),
+          volumeName: r["volumeName"]?.As<string?>(),
+          pathUseCount: r[ "pathUseCount"]?.As<int>() ?? 0,
+          characterCredits: r["characterCredits"] is null ? [] : [.. r["characterCredits"].As<List<object>>().Select(v => v.As<int>())]
+          ))
         .SingleOrDefaultAsync();
     });
   }
@@ -191,52 +236,14 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
             c.image_url = coalesce($imageUrl, c.image_url),
             c.site_detail_url = coalesce($siteDetailUrl, c.site_detail_url),
             c.volume_id = $volumeId,
-            c.volume_name = $volumeName
+            c.volume_name = $volumeName,
+            c.character_credits = $characterCredits
         """,
         new
         {
           comicVineId = issue.ComicVineId, name = issue.Name, imageUrl = issue.ImageUrl,
-          siteDetailUrl = issue.SiteDetailUrl, volumeId = issue.VolumeId, volumeName = issue.VolumeName
-        });
-      await cursor.ConsumeAsync();
-    });
-  }
-
-  public async Task UpsertConnectionAsync(Connection connection)
-  {
-    // MVP only ever produces per-issue Connections (ADR-0007) — Shared Identity's
-    // issue-less Connections are a later ticket, not this crawl path.
-    Debug.Assert(connection.ComicIssueId is not null, "expected a comic issue id for this MVP write path");
-
-    // Same Issue carries no meaning in which Character is Source vs Target, but MERGE's
-    // relationship pattern is directional — without canonicalizing, the same real-world
-    // pair discovered in opposite orders by different crawl runs would MERGE onto two
-    // different relationships instead of one.
-    var (sourceId, targetId) =
-      connection.SourceCharacterComicVineId > connection.TargetCharacterComicVineId
-        ? (connection.TargetCharacterComicVineId, connection.SourceCharacterComicVineId)
-        : (connection.SourceCharacterComicVineId, connection.TargetCharacterComicVineId);
-
-    await using var session = driver.AsyncSession(ConfigureSession);
-    await session.ExecuteWriteAsync(async tx =>
-    {
-      var cursor = await tx.RunAsync(
-        """
-        MATCH (source:Character {comic_vine_id: $sourceId})
-        MATCH (target:Character {comic_vine_id: $targetId})
-        MERGE (source)-[r:CONNECTION {comic_issue_id: $comicIssueId}]->(target)
-        SET r.published_at = $publishedAt,
-            r.comic_issue_name = coalesce($comicIssueName, r.comic_issue_name),
-            r.comic_issue_site_detail_url = coalesce($comicIssueSiteDetailUrl, r.comic_issue_site_detail_url)
-        """,
-        new
-        {
-          sourceId,
-          targetId,
-          comicIssueId = connection.ComicIssueId,
-          publishedAt = connection.ComicIssuePublishedAt?.ToString("yyyy-MM-dd"),
-          comicIssueName = connection.ComicIssueName,
-          comicIssueSiteDetailUrl = connection.ComicIssueSiteDetailUrl
+          siteDetailUrl = issue.SiteDetailUrl, volumeId = issue.VolumeId, volumeName = issue.VolumeName,
+          characterCredits = issue.CharacterCredits
         });
       await cursor.ConsumeAsync();
     });
@@ -258,69 +265,46 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
         new { query, limit });
 
       var records = await cursor.ToListAsync();
-      return (IReadOnlyList<Character>)records
-        .Select(r => new Character(r["comicVineId"].As<int>(), r["name"].As<string>(), r["imageUrl"].As<string?>(),
-          r["siteDetailUrl"].As<string?>()))
-        .ToList();
+      return (IReadOnlyList<Character>)
+      [
+        .. records.Select(r =>
+          new Character(r["comicVineId"].As<int>(),
+            r["name"].As<string>(),
+            imageUrl: r["imageUrl"].As<string?>(),
+            siteDetailUrl: r["siteDetailUrl"].As<string?>()))
+      ];
     });
   }
 
-  private async Task<IReadOnlyDictionary<int, int>> GetNeighborCharactersAsync(int comicVineId)
+  public async Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds)
   {
     await using var session = driver.AsyncSession(ConfigureSession);
     return await session.ExecuteReadAsync(async tx =>
     {
       var cursor = await tx.RunAsync(
         """
-        MATCH (c:Character {comic_vine_id: $comicVineId})
-        UNWIND c.issue_credits AS issueId
-        MATCH (i:Issue {comic_vine_id: issueId})
-        UNWIND i.character_credits AS neighborId
-        WITH DISTINCT neighborId, issueId
-        WHERE neighborId <> $comicVineId
-        RETURN neighborId, issueId
+        MATCH (c:Character)
+        WHERE c.ingestion_date_time IS NOT NULL AND NOT c.comic_vine_id IN $excludedIds
+        RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl,
+               c.friend_ids AS friendIds, c.enemy_ids AS enemyIds, c.ingestion_date_time AS ingestionDateTime,
+               c.seed_use_count AS seedUseCount, c.bridge_use_count AS bridgeUseCount
+        ORDER BY c.ingestion_date_time ASC
+        LIMIT 1
         """,
-        new { comicVineId });
+        new { excludedIds });
 
-      var records = await cursor.ToListAsync();
-      var result = new Dictionary<int, int>();
-      foreach (var record in records)
-      {
-        result.TryAdd(record["neighborId"].As<int>(), record["issueId"].As<int>());
-      }
-
-      return (IReadOnlyDictionary<int, int>)result;
+      return await cursor.Select(r =>
+        new Character(r["comicVineId"].As<int>(),
+          r["name"].As<string>(),
+          imageUrl: r["imageUrl"].As<string?>(),
+          siteDetailUrl: r["siteDetailUrl"].As<string?>(),
+          seedUseCount: r["seedUseCount"]?.As<int>() ?? 0,
+          bridgeUseCount: r["bridgeUseCount"]?.As<int>() ?? 0,
+          friendIds: r["friendIds"] is null ? [] : [.. r["friendIds"].As<List<object>>().Select(v => v.As<int>())],
+          enemyIds: r["enemyIds"] is null ? [] : [.. r["enemyIds"].As<List<object>>().Select(v => v.As<int>())],
+          ingestionDateTime: r["ingestionDateTime"]?.As<DateTimeOffset>().UtcDateTime
+        )).SingleOrDefaultAsync();
     });
-  }
-
-  private async Task<Path> ReconstructPathAsync(int endingCharacterId,
-    Dictionary<int, (int PreviousCharacterId, int IssueId)> parent)
-  {
-    var idPath = new List<int> { endingCharacterId };
-
-    var characters = new Dictionary<int, Character>();
-    var endingCharacter = await GetCharacterAsync(endingCharacterId);
-    characters.Add(endingCharacterId, endingCharacter);
-
-    var hops = new List<Hop>();
-
-    while (parent.TryGetValue(idPath[^1], out var link))
-    {
-      var currentId = idPath[^1];
-      idPath.Add(link.PreviousCharacterId);
-
-      var newCharacter = await GetCharacterAsync(link.PreviousCharacterId);
-      characters[link.PreviousCharacterId] = newCharacter!;
-
-      var issue = await GetIssueAsync(link.IssueId);
-
-      hops.Add(new Hop(characters[link.PreviousCharacterId], characters[currentId], issue!));
-    }
-
-    idPath.Reverse();
-    hops.Reverse();
-
-    return new Path([.. idPath.Select(id => characters[id])], hops);
   }
 
   private void ConfigureSession(SessionConfigBuilder builder)
@@ -331,16 +315,14 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null) : 
     }
   }
 
-  public async Task<(long CharacterCount, long ConnectionCount)> GetSummaryAsync()
+  public async Task<long> GetSummaryAsync()
   {
     await using var session = driver.AsyncSession(ConfigureSession);
     return await session.ExecuteReadAsync(async tx =>
     {
-      var cursor = await tx.RunAsync(
-        "MATCH (c:Character) OPTIONAL MATCH ()-[r:CONNECTION]->() " +
-        "RETURN count(DISTINCT c) AS characters, count(DISTINCT r) AS connections");
-      var record = await cursor.SingleAsync();
-      return (record["characters"].As<long>(), record["connections"].As<long>());
+      var cursor = await tx.RunAsync("MATCH (c:Character) RETURN count(DISTINCT c) AS characters");
+      var record = await cursor.SingleOrDefaultAsync();
+      return record is null ? 0 : record["characters"].As<long>();
     });
   }
 }

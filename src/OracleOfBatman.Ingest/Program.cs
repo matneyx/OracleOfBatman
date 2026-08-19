@@ -54,7 +54,7 @@ Console.WriteLine(result.Connected
   ? $"Connected after fetching {result.CharactersFetched} new character(s)."
   : $"Not connected after fetching {result.CharactersFetched} new character(s) — budget ({budget}) exhausted or frontier exhausted first.");
 
-var (characterCount, connectionCount) = await graphStore.GetSummaryAsync();
-Console.WriteLine($"Neo4j now has {characterCount} Character(s) and {connectionCount} Connection(s) total.");
+var characterCount = await graphStore.GetSummaryAsync();
+Console.WriteLine($"Neo4j now has {characterCount} Character(s) total.");
 
 return 0;
