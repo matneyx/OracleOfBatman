@@ -54,17 +54,13 @@ tickets (see `docs/MVP.md` for the format), then remove it from here.
 
 ## Ingestion
 
-- **Build ADR-0014's issue-cast escalation step (Team deferred)** — next
-  up, scoped down: `PopulateConnectionsAsync` still only does ADR-0010's
-  basic friends/enemies BFS; `Issue.character_credits` (just wired up) is
-  captured but nothing consumes it yet. When the BFS exhausts its budget
-  with no connection found, escalate to fetching full `/issue/{id}/` casts
-  for the frontier's issues and check `character_credits` for strong
-  candidates (2+ appearances, ADR-0014). Refinement over ADR-0014's
-  original rule, decided but not yet built: if nobody hits the 2+
-  threshold, fall back to weaker (1+) candidates rather than giving up
-  outright. Team-side escalation (team rosters, `MEMBER_OF`) explicitly
-  deferred — Team isn't a node yet at all (see below).
+- **Weak-candidate fallback for ADR-0014's issue-cast escalation** — the
+  escalation itself is built (`ConnectionCrawler`: once friends/enemies run
+  dry, fetch issue casts and ingest strong candidates credited in 2+ of
+  them). Decided but not yet built: if nobody hits the 2+ threshold, fall
+  back to weaker (1+) candidates rather than giving up outright.
+  Team-side escalation (team rosters, `MEMBER_OF`) stays deferred — Team
+  isn't a node yet at all (see below).
 - **Model Team as a first-class Domain type/Neo4j node** (ADR-0014,
   designed not yet built) — same `MEMBER_OF` treatment `CREDITED_IN` got
   in ADR-0016: a Character's team memberships become real edges, used by

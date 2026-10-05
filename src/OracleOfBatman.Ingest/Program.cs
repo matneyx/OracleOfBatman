@@ -7,7 +7,7 @@ using OracleOfBatman.Graph.ComicVine;
 // name-based lookup (MVP.md ticket 5's original --seed <name>) is a deferred follow-up.
 
 var seedIds = new List<int>();
-var budget = 50;
+var budget = 200;
 
 for (var i = 0; i < args.Length; i++)
 {
@@ -41,18 +41,22 @@ httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("OracleOfBatman/0.1 (+https:
 var characterRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
 var issueRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
 var searchRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
-var characterSource = new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter,
+var comicVineSource = new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter,
   searchRateLimiter);
 
 await using var driver = GraphDatabase.Driver(neo4jUri, AuthTokens.Basic(neo4jUsername, neo4jPassword));
 var graphStore = new Neo4jGraphWriter(driver, neo4jDatabase);
+var issueEnrichmentService = new IssueEnrichmentService(comicVineSource, graphStore);
 
-var crawler = new ConnectionCrawler(characterSource, graphStore);
+await graphStore.EnsureSchemaAsync();
+
+var crawler = new ConnectionCrawler(comicVineSource, graphStore, issueEnrichmentService,
+  trace: Console.WriteLine);
 var result = await crawler.PopulateConnectionsAsync(seedIds[0], seedIds[1], budget);
 
 Console.WriteLine(result.Connected
-  ? $"Connected after fetching {result.CharactersFetched} new character(s)."
-  : $"Not connected after fetching {result.CharactersFetched} new character(s) — budget ({budget}) exhausted or frontier exhausted first.");
+  ? $"Connected after fetching {result.CharactersFetched} new character(s) and {result.IssuesFetched} issue cast(s)."
+  : $"Not connected after fetching {result.CharactersFetched} new character(s) and {result.IssuesFetched} issue cast(s) — budget ({budget}) exhausted or every signal exhausted first.");
 
 var characterCount = await graphStore.GetSummaryAsync();
 Console.WriteLine($"Neo4j now has {characterCount} Character(s) total.");

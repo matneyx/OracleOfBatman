@@ -21,7 +21,11 @@ var neo4jPassword = Environment.GetEnvironmentVariable("NEO4J_PASSWORD") ?? "cha
 var neo4jDatabase = Environment.GetEnvironmentVariable("NEO4J_DATABASE");
 
 builder.Services.AddSingleton(GraphDatabase.Driver(neo4jUri, AuthTokens.Basic(neo4jUsername, neo4jPassword)));
-builder.Services.AddScoped<IGraphStore>(sp => new Neo4jGraphWriter(sp.GetRequiredService<IDriver>(), neo4jDatabase));
+builder.Services.AddScoped<IGraphStore>(sp =>
+{
+  var logger = sp.GetRequiredService<ILogger<Neo4jGraphWriter>>();
+  return new Neo4jGraphWriter(sp.GetRequiredService<IDriver>(), neo4jDatabase, trace: message => logger.LogInformation("{WriterTrace}", message));
+});
 
 var comicVineApiKey = Environment.GetEnvironmentVariable("COMIC_VINE_API_KEY");
 if (comicVineApiKey is not null)
@@ -43,13 +47,23 @@ if (comicVineApiKey is not null)
   builder.Services.AddScoped<IComicVineCharacterSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
   builder.Services.AddScoped<IComicVineIssueSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
   builder.Services.AddScoped<IComicVineCharacterSearchSource>(sp => sp.GetRequiredService<ComicVineApiClient>());
-  builder.Services.AddScoped(sp => new ConnectionCrawler(sp.GetRequiredService<IComicVineCharacterSource>(), sp.GetRequiredService<IGraphStore>()));
   builder.Services.AddScoped(sp => new IssueEnrichmentService(
     sp.GetRequiredService<IComicVineIssueSource>(), sp.GetRequiredService<IGraphStore>()));
+  builder.Services.AddScoped(sp =>
+  {
+    // Crawl narration goes to the app's normal logger, so `dotnet run` shows it in the
+    // console alongside everything else ASP.NET Core writes.
+    var logger = sp.GetRequiredService<ILogger<ConnectionCrawler>>();
+    return new ConnectionCrawler(sp.GetRequiredService<IComicVineCharacterSource>(),
+      sp.GetRequiredService<IGraphStore>(), sp.GetRequiredService<IssueEnrichmentService>(),
+      trace: message => logger.LogInformation("{CrawlTrace}", message));
+  });
 }
 
 var app = builder.Build();
 
+var neo4jGraphWriter = new Neo4jGraphWriter(app.Services.GetRequiredService<IDriver>(), neo4jDatabase, trace: message => app.Logger.LogInformation("{WriterTrace}", message));
+await neo4jGraphWriter.EnsureSchemaAsync();
 await SeedBatmanIfMissingAsync(app.Services);
 
 // Configure the HTTP request pipeline.

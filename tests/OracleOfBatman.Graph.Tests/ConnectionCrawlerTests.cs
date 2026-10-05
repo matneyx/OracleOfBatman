@@ -26,6 +26,19 @@ public class ConnectionCrawlerTests
     IssueCredits = (issues ?? []).Select(i => new ComicVineIssueRef { Id = i, Name = $"Issue{i}" }).ToList()
   };
 
+  private static ComicVineIssue Issue(int id, params int[] cast) => new()
+  {
+    Id = id,
+    Name = $"Issue{id}",
+    Image = new ComicVineImage { IconUrl = $"https://example.com/issue{id}.jpg" },
+    CharacterCredits = [.. cast.Select(c => new ComicVineCharacterRef { Id = c, Name = $"Character{c}" })]
+  };
+
+  private static ConnectionCrawler Crawler(FakeComicVineCharacterSource characterSource, FakeGraphStore graphStore,
+    FakeComicVineIssueSource? issueSource = null, TimeProvider? timeProvider = null) =>
+    new(characterSource, graphStore,
+      new IssueEnrichmentService(issueSource ?? new FakeComicVineIssueSource([]), graphStore), timeProvider);
+
   [Fact]
   public async Task AlreadyConnected_ReturnsImmediatelyWithoutFetchingAnything()
   {
@@ -36,7 +49,7 @@ public class ConnectionCrawlerTests
     await graphStore.UpsertCharacterAsync(new Character(SeedB, "B"));
     await graphStore.UpsertCreditedInAsync(SeedB, [new Issue(999, "Issue999")]);
     var characterSource = new FakeComicVineCharacterSource([]);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
 
@@ -55,7 +68,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
 
@@ -76,7 +89,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
 
@@ -103,7 +116,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
 
@@ -129,7 +142,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
 
@@ -151,7 +164,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     // A's frontier (1 friend) is smaller than B's (3 friends) — the one expansion the
     // budget allows should come from A's side.
@@ -178,7 +191,7 @@ public class ConnectionCrawlerTests
     await graphStore.UpsertCharacterAsync(new Character(earlierRunCharacter, "EarlierRunCharacter"));
     await graphStore.UpsertCreditedInAsync(earlierRunCharacter, [new Issue(555, "Issue555")]);
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
 
@@ -197,9 +210,17 @@ public class ConnectionCrawlerTests
       [SeedB] = Character(SeedB, "B", [mutualFriend], issues: [222]),
       [mutualFriend] = Character(mutualFriend, "Mutual", issues: [333])
     };
+    // Nobody outside the three characters is credited anywhere, so the issue-cast
+    // escalation that follows the exhausted BFS finds no candidate to fetch.
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [111] = Issue(111, SeedA),
+      [222] = Issue(222, SeedB),
+      [333] = Issue(333, mutualFriend)
+    };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
 
     await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
 
@@ -219,7 +240,7 @@ public class ConnectionCrawlerTests
     await graphStore.UpsertCharacterAsync(new Character(alreadyKnownId, "AlreadyKnown"));
     await graphStore.UpsertCreditedInAsync(alreadyKnownId, [new Issue(700, "Issue700")]);
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     var ingested = await crawler.IngestCharacterAsync(newCharacterId);
 
@@ -235,7 +256,7 @@ public class ConnectionCrawlerTests
     var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "New") };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
     Character? addedCharacter = null;
     crawler.CharacterAdded += c => addedCharacter = (Character?)c;
 
@@ -254,7 +275,7 @@ public class ConnectionCrawlerTests
     var graphStore = new FakeGraphStore();
     await graphStore.UpsertCharacterAsync(new Character(existingId, "AlreadyThere"));
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
     var raised = false;
     crawler.CharacterAdded += _ => raised = true;
 
@@ -274,7 +295,7 @@ public class ConnectionCrawlerTests
     };
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
-    var crawler = new ConnectionCrawler(characterSource, graphStore);
+    var crawler = Crawler(characterSource, graphStore);
 
     await crawler.IngestCharacterAsync(42);
 
@@ -290,7 +311,7 @@ public class ConnectionCrawlerTests
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
     var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
-    var crawler = new ConnectionCrawler(characterSource, graphStore, timeProvider);
+    var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
 
     await crawler.IngestCharacterAsync(42);
 
@@ -307,7 +328,7 @@ public class ConnectionCrawlerTests
     var graphStore = new FakeGraphStore();
     var characterSource = new FakeComicVineCharacterSource(characters);
     var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
-    var crawler = new ConnectionCrawler(characterSource, graphStore, timeProvider);
+    var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
     await crawler.IngestCharacterAsync(42);
 
     timeProvider.SetUtcNow(new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero));
@@ -325,7 +346,7 @@ public class ConnectionCrawlerTests
       ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
     await graphStore.UpsertCharacterAsync(new Character(2, "B",
       ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
-    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+    var crawler = Crawler(new FakeComicVineCharacterSource([]), graphStore);
 
     var picked = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
 
@@ -340,7 +361,7 @@ public class ConnectionCrawlerTests
       ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
     await graphStore.UpsertCharacterAsync(new Character(2, "B",
       ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
-    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+    var crawler = Crawler(new FakeComicVineCharacterSource([]), graphStore);
 
     var picked = await crawler.PickRandomCharacterAsync(excludeCharacterId: 1);
 
@@ -357,7 +378,7 @@ public class ConnectionCrawlerTests
       ingestionDateTime: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
     await graphStore.UpsertCharacterAsync(new Character(3, "C",
       ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
-    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+    var crawler = Crawler(new FakeComicVineCharacterSource([]), graphStore);
 
     var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
     var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
@@ -374,7 +395,7 @@ public class ConnectionCrawlerTests
       ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
     await graphStore.UpsertCharacterAsync(new Character(2, "B",
       ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
-    var crawler = new ConnectionCrawler(new FakeComicVineCharacterSource([]), graphStore);
+    var crawler = Crawler(new FakeComicVineCharacterSource([]), graphStore);
 
     var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
     var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
@@ -383,5 +404,152 @@ public class ConnectionCrawlerTests
     Assert.Equal(1, first!.ComicVineId);
     Assert.Equal(2, second!.ComicVineId);
     Assert.Equal(1, third!.ComicVineId);
+  }
+
+  [Fact]
+  public async Task FriendsAndEnemiesExhausted_EscalatesToIssueCasts_AndIngestsACharacterCreditedInTwoOfThem()
+  {
+    // ADR-0014 steps 4-5: neither seed has a friend or enemy to follow, so the only way
+    // to find a bridge is the full cast of the issues they're credited in.
+    const int bridge = 30;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100]),
+      [SeedB] = Character(SeedB, "B", issues: [200]),
+      [bridge] = Character(bridge, "Bridge", issues: [100, 200])
+    };
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [100] = Issue(100, SeedA, bridge),
+      [200] = Issue(200, SeedB, bridge)
+    };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var issueSource = new FakeComicVineIssueSource(issues);
+    var crawler = Crawler(characterSource, graphStore, issueSource);
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+
+    Assert.True(result.Connected);
+    Assert.Equal([SeedA, SeedB, bridge], characterSource.FetchedIds);
+    Assert.Equal(1, result.CharactersFetched);
+    Assert.Equal(2, result.IssuesFetched);
+  }
+
+  [Fact]
+  public async Task IssueCastEscalation_IgnoresCharactersCreditedInOnlyOneOfTheFetchedCasts()
+  {
+    // The strong-candidate rule (ADR-0014 step 5): a single shared cast isn't worth a
+    // request, or a large ensemble issue would drain the whole budget by itself.
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100]),
+      [SeedB] = Character(SeedB, "B", issues: [200])
+    };
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [100] = Issue(100, SeedA, 40),
+      [200] = Issue(200, SeedB, 41)
+    };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+
+    Assert.False(result.Connected);
+    Assert.Equal([SeedA, SeedB], characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task IssueCastEscalation_ReusesAlreadyMaterializedCharacterCredits_WithoutRefetchingTheIssue()
+  {
+    // ADR-0015's refinement of ADR-0014 step 4: a cast already in Neo4j (from some
+    // earlier, unrelated enrichment) is free — never pay Comic Vine for it twice.
+    const int bridge = 30;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100]),
+      [SeedB] = Character(SeedB, "B", issues: [200]),
+      [bridge] = Character(bridge, "Bridge", issues: [100, 200])
+    };
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertIssueAsync(new Issue(100, "Issue100", characterCredits: [SeedA, bridge]));
+    await graphStore.UpsertIssueAsync(new Issue(200, "Issue200", characterCredits: [SeedB, bridge]));
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    // Empty: any real fetch attempt throws, failing the test loudly.
+    var issueSource = new FakeComicVineIssueSource([]);
+    var crawler = Crawler(characterSource, graphStore, issueSource);
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+
+    Assert.True(result.Connected);
+    Assert.Empty(issueSource.FetchedIds);
+    Assert.Equal(0, result.IssuesFetched);
+  }
+
+  [Fact]
+  public async Task IssueCastEscalation_CountsIssueFetchesAgainstTheSameBudgetAsCharacterFetches()
+  {
+    // ADR-0014's one unified counter: an /issue/{id}/ cast-fetch costs exactly what a
+    // /character/{id}/ fetch costs, even though it reveals many candidates at once.
+    const int bridge = 30;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100]),
+      [SeedB] = Character(SeedB, "B", issues: [200]),
+      [bridge] = Character(bridge, "Bridge", issues: [100, 200])
+    };
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [100] = Issue(100, SeedA, bridge),
+      [200] = Issue(200, SeedB, bridge)
+    };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
+
+    // Only enough budget for one cast fetch — never enough to see the bridge in two of
+    // them, let alone ingest it.
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
+
+    Assert.False(result.Connected);
+    Assert.Equal(1, result.IssuesFetched);
+    Assert.Equal(0, result.CharactersFetched);
+    Assert.DoesNotContain(bridge, characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task IssueCastEscalation_RecursesIntoAStrongCandidatesOwnIssues()
+  {
+    // ADR-0014 step 5: a newly-ingested strong candidate's issues become the next
+    // round's candidate pool, so escalation can walk more than one issue deep.
+    const int firstBridge = 30;
+    const int secondBridge = 31;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100, 101]),
+      [SeedB] = Character(SeedB, "B", issues: [200]),
+      // Shares no issue with SeedB — only with SeedA and with secondBridge.
+      [firstBridge] = Character(firstBridge, "FirstBridge", issues: [100, 101, 300, 301]),
+      [secondBridge] = Character(secondBridge, "SecondBridge", issues: [300, 301, 200])
+    };
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [100] = Issue(100, SeedA, firstBridge),
+      [101] = Issue(101, SeedA, firstBridge),
+      [200] = Issue(200, SeedB, secondBridge),
+      // Only reachable once firstBridge has been ingested and its own credits pooled.
+      [300] = Issue(300, firstBridge, secondBridge),
+      [301] = Issue(301, firstBridge, secondBridge)
+    };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+
+    Assert.True(result.Connected);
+    Assert.Contains(secondBridge, characterSource.FetchedIds);
   }
 }
