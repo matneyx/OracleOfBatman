@@ -36,17 +36,29 @@ docs/adr/   — architecture decision records
 
 ## Running locally
 
+Everything in Docker ([ADR-0017](./docs/adr/0017-docker-for-the-whole-stack.md)):
+
 ```
-cp .env.example .env   # fill in your Comic Vine API key if you're running ingest
-docker compose up -d   # Neo4j only
-dotnet watch --project src/OracleOfBatman.Web run
+cp .env.example .env            # fill in your Comic Vine API key
+docker compose up -d --build    # Neo4j + web
 ```
 
-- Web app (dev, hot reload): http://localhost:5204
+- Web app: http://localhost:8080
 - Neo4j Browser: http://localhost:7474
 
 To run the ingestion console app (not started by default):
 
 ```
-dotnet run --project src/OracleOfBatman.Ingest
+docker compose run --rm ingest --seed-id 1699 --seed-id 1440
 ```
+
+For development with hot reload, run only Neo4j in Docker and the web app on
+the host:
+
+```
+docker compose up -d neo4j
+dotnet watch --project src/OracleOfBatman.Web run
+```
+
+- Web app (dev, hot reload): http://localhost:5204
+- The Graph tests use Testcontainers, so Docker must be running for `dotnet test`.

@@ -5,9 +5,55 @@ services:
       NEO4J_AUTH: ${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:-changeme}
     ports:
       - "7474:7474" # browser UI
-      - "7687:7687" # bolt
+      - "7687:7687" # bolt — published so host-side `dotnet watch` and the test suite can still reach it
     volumes:
       - neo4j-data:/data
+    healthcheck:
+      # Bolt accepts connections a few seconds after the HTTP port does; the web app
+      # runs EnsureSchemaAsync at startup and crashes if Neo4j isn't ready yet.
+      test: ["CMD-SHELL", "cypher-shell -u \"$${NEO4J_AUTH%%/*}\" -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: web
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    # .env supplies COMIC_VINE_API_KEY and credentials; NEO4J_URI is overridden below
+    # because .env's localhost value only works from the host.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      ASPNETCORE_ENVIRONMENT: Production
+    ports:
+      - "8080:8080"
+    volumes:
+      # Antiforgery/data-protection keys — without this, every rebuild invalidates them.
+      - web-keys:/root/.aspnet/DataProtection-Keys
+    restart: unless-stopped
+
+  # On-demand only: `docker compose run --rm ingest --seed-id 1699 --seed-id 1440`
+  ingest:
+    build:
+      context: .
+      target: ingest
+    profiles: ["ingest"]
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
 
 volumes:
   neo4j-data:
+  web-keys:
