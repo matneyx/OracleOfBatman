@@ -1,0 +1,34 @@
+@using Path = OracleOfBatman.Domain.Path
+
+<MudSimpleTable>
+  <tbody>
+  @foreach (var hop in Path.Hops)
+  {
+    <tr>
+      <td>
+        <CharacterCard Character="@hop.From" />
+      </td>
+      <td>
+        Was In
+      </td>
+      <td>
+        <IssueCard Issue="@hop.Issue" />
+      </td>
+      <td>
+        With
+      </td>
+      <td>
+        <CharacterCard Character="@hop.To" />
+      </td>
+    </tr>
+  }
+  </tbody>
+</MudSimpleTable>
+
+@code {
+
+  [Parameter]
+  [EditorRequired]
+  public required Path Path { get; set; }
+
+}

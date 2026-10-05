@@ -1,25 +1,20 @@
 @using OracleOfBatman.Domain
-<MudCard data-testid="@($"character-card-{Character.ComicVineId}")">
-  <MudCardContent>
-    <MudGrid Spacing="1">
-      <MudItem sm="4">
-        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large" Class="rounded" data-testid="character-avatar">
-          <MudImage Src="@Character.ImageUrl"/>
-        </MudAvatar>
-      </MudItem>
-      <MudItem sm="8" data-testid="character-name">
-        @if (Character.SiteDetailUrl is null or "")
-        {
-          <MudText Typo="Typo.h5">@Character.Name</MudText>
-        }
-        else
-        {
-          <MudLink Href="@Character.SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Character.Name</MudLink>
-        }
-      </MudItem>
-    </MudGrid>
-  </MudCardContent>
-</MudCard>
+<div class="entity-chip" data-testid="@($"character-card-{Character.ComicVineId}")">
+  <MudAvatar Size="Size.Large" Class="entity-chip__avatar" data-testid="character-avatar">
+    <MudImage Src="@Character.ImageUrl" Alt="@Character.Name" ObjectFit="ObjectFit.Cover"/>
+  </MudAvatar>
+  <div class="entity-chip__name" data-testid="character-name">
+    @if (Character.SiteDetailUrl is null or "")
+    {
+      <MudText Typo="Typo.body1">@Character.Name</MudText>
+    }
+    else
+    {
+      <MudLink Href="@Character.SiteDetailUrl" Typo="Typo.body1" Color="Color.Inherit" Underline="Underline.Hover"
+               Target="_blank">@Character.Name</MudLink>
+    }
+  </div>
+</div>
 
 @code {
 

@@ -1,0 +1,77 @@
+/* Gotham styling that MudTheme can't express. Palette values live in GothamTheme.cs;
+   only the handful repeated here (glow, borders) are duplicated, on purpose, as literals. */
+
+body {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% -10%, rgba(245, 197, 24, 0.10), transparent 70%),
+    #0B0D10;
+  background-attachment: fixed;
+}
+
+.gotham-layout {
+  background: transparent;
+}
+
+.gotham-appbar {
+  border-bottom: 1px solid #262C35;
+  backdrop-filter: blur(6px);
+  background-color: rgba(11, 13, 16, 0.85) !important;
+}
+
+.gotham-wordmark {
+  text-transform: uppercase;
+}
+
+.gotham-hero {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.gotham-hero h1, .gotham-hero h3 {
+  text-transform: uppercase;
+  text-shadow: 0 0 24px rgba(245, 197, 24, 0.25);
+}
+
+.gotham-panel {
+  border: 1px solid #262C35;
+  background: rgba(20, 24, 30, 0.85) !important;
+}
+
+.batman-number {
+  font-family: Oswald, "Roboto Condensed", sans-serif;
+  font-size: 4rem;
+  line-height: 1;
+  color: #F5C518;
+  text-shadow: 0 0 32px rgba(245, 197, 24, 0.35);
+}
+
+/* Character + Issue cards: one compact row, used in autocomplete items,
+   Comic Vine results, and path rows alike. */
+.entity-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.entity-chip__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.entity-chip__avatar {
+  border: 1px solid #3A424D;
+  flex-shrink: 0;
+}
+
+/* Comic covers are portrait, roughly 2:3. */
+.entity-chip__cover {
+  width: 40px !important;
+  height: 60px !important;
+  border-radius: 4px !important;
+}
+
+.batman-number-block {
+  text-align: center;
+}

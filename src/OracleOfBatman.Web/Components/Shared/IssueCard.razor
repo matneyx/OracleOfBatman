@@ -1,26 +1,20 @@
 @using OracleOfBatman.Domain
-<MudCard data-testid="@($"issue-card-{Issue.ComicVineId}")">
-  <MudCardContent>
-    <MudGrid Spacing="1">
-      <MudItem sm="4">
-        <MudAvatar Square Variant="Variant.Outlined" Size="Size.Large" Class="rounded"
-                   data-testid="@("issue-avatar")">
-          <MudImage Src="@Issue.ImageUrl"/>
-        </MudAvatar>
-      </MudItem>
-      <MudItem sm="8" data-testid="@("issue-name")">
-        @if (Issue.SiteDetailUrl is null or "")
-        {
-          <MudText Typo="Typo.h5">@Issue.ToDisplayName()</MudText>
-        }
-        else
-        {
-          <MudLink Href="@Issue.SiteDetailUrl" Typo="Typo.h5" Target="_blank">@Issue.ToDisplayName()</MudLink>
-        }
-      </MudItem>
-    </MudGrid>
-  </MudCardContent>
-</MudCard>
+<div class="entity-chip" data-testid="@($"issue-card-{Issue.ComicVineId}")">
+  <MudAvatar Square="true" Class="entity-chip__avatar entity-chip__cover" data-testid="issue-avatar">
+    <MudImage Src="@Issue.ImageUrl" Alt="@Issue.ToDisplayName()" ObjectFit="ObjectFit.Cover"/>
+  </MudAvatar>
+  <div class="entity-chip__name" data-testid="issue-name">
+    @if (Issue.SiteDetailUrl is null or "")
+    {
+      <MudText Typo="Typo.body2">@Issue.ToDisplayName()</MudText>
+    }
+    else
+    {
+      <MudLink Href="@Issue.SiteDetailUrl" Typo="Typo.body2" Color="Color.Inherit" Underline="Underline.Hover"
+               Target="_blank">@Issue.ToDisplayName()</MudLink>
+    }
+  </div>
+</div>
 
 @code {
 

@@ -10,9 +10,14 @@
 
 <PageTitle>Oracle of Batman</PageTitle>
 
-<MudText Typo="Typo.h3" GutterBottom="true">Oracle of Batman</MudText>
-<MudText Class="mb-4">Find the shortest path of Connections between two Characters.</MudText>
+<div class="gotham-hero">
+  <MudText Typo="Typo.h3" Color="Color.Primary">Oracle of Batman</MudText>
+  <MudText Typo="Typo.subtitle1" Color="Color.Secondary">
+    How many issues stand between any Character and the Dark Knight?
+  </MudText>
+</div>
 
+<MudPaper Class="gotham-panel pa-6 mb-6" Elevation="0">
 <MudGrid>
   <MudItem xs="12" sm="5">
     <MudAutocomplete T="Character" Label="Character A" @bind-Value="_characterA"
@@ -48,11 +53,12 @@
     </MudButton>
   </MudItem>
 </MudGrid>
+</MudPaper>
 
 @if (_comicVineSearchSource is not null)
 {
-  <MudDivider Class="my-4"/>
-  <MudText Typo="Typo.subtitle1" Class="mb-2">Can't find a character above? Search Comic Vine directly:</MudText>
+  <MudPaper Class="gotham-panel pa-6 mb-6" Elevation="0">
+  <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mb-2">Not in the graph yet? Search Comic Vine</MudText>
   <MudGrid>
     <MudItem xs="12" sm="9">
       <MudTextField @bind-Value="_comicVineQuery" Label="Search Comic Vine" Immediate="true"
@@ -75,7 +81,7 @@
   {
     @foreach (var result in _comicVineResults)
     {
-      <MudPaper Class="pa-2 mb-2 d-flex align-center ga-2" Outlined="true">
+      <MudPaper Class="gotham-panel pa-3 mb-2 d-flex align-center ga-2" Elevation="0">
         <div class="flex-grow-1">
           <CharacterCard Character="ToCharacter(result)"/>
         </div>
@@ -97,25 +103,19 @@
   {
     <MudText Typo="Typo.body2">No Comic Vine results for "@_comicVineQuery".</MudText>
   }
+  </MudPaper>
 }
 
 @if (_searched)
 {
-  <MudDivider Class="my-4"/>
-
+  <MudPaper Class="gotham-panel pa-6" Elevation="0">
   @if (_path is { } path)
   {
-    <MudText Typo="Typo.h5" GutterBottom="true">Batman Number: @path.BatmanNumber</MudText>
-    @foreach (var hop in path.Hops)
-    {
-      <MudPaper Class="pa-3 mb-2 d-flex align-center flex-wrap ga-2" Outlined="true">
-        <CharacterCard Character="hop.From"/>
-        <MudText>&nbsp;was credited in&nbsp;</MudText>
-        <IssueCard Issue="@hop.Issue"/>
-        <MudText>&nbsp;with&nbsp;</MudText>
-        <CharacterCard Character="hop.To"/>
-      </MudPaper>
-    }
+    <div class="batman-number-block mb-4">
+      <MudText Typo="Typo.overline" Color="Color.Secondary">Batman Number</MudText>
+      <div class="batman-number">@path.BatmanNumber</div>
+    </div>
+    <PathTable Path="@_path"/>
   }
   else
   {
@@ -127,6 +127,7 @@
       </MudButton>
     }
   }
+  </MudPaper>
 }
 
 @code {
