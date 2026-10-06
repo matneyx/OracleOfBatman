@@ -24,7 +24,7 @@
                      SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
                      Clearable="true" ResetValueOnEmptyText="true" data-testid="character-a-input">
       <ItemTemplate>
-        <CharacterCard Character="context"/>
+        <CharacterCard Character="context" Linked="false"/>
       </ItemTemplate>
     </MudAutocomplete>
     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => PickRandomCharacterAsync(true))"
@@ -37,7 +37,7 @@
                      SearchFunc="SearchCharactersAsync" ToStringFunc="CharacterName"
                      Clearable="true" ResetValueOnEmptyText="true" data-testid="character-b-input">
       <ItemTemplate>
-        <CharacterCard Character="context"/>
+        <CharacterCard Character="context" Linked="false"/>
       </ItemTemplate>
     </MudAutocomplete>
     <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => PickRandomCharacterAsync(false))"

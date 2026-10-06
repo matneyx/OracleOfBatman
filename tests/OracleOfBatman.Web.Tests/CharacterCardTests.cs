@@ -38,6 +38,21 @@ public class CharacterCardTests : BunitContext
   }
 
   [Fact]
+  public void RendersPlainName_WhenLinkingIsTurnedOff_EvenWithASiteDetailUrl()
+  {
+    // Inside an autocomplete item, a link swallows the click that should select the
+    // Character and opens Comic Vine instead.
+    var character = new Character(12605, "Jim Hammond", imageUrl: null, siteDetailUrl: "https://comicvine.gamespot.com/jim-hammond/4005-12605/");
+
+    var cut = Render<CharacterCard>(p => p
+      .Add(c => c.Character, character)
+      .Add(c => c.Linked, false));
+
+    Assert.Empty(cut.FindAll("a"));
+    Assert.Contains("Jim Hammond", cut.Markup);
+  }
+
+  [Fact]
   public void RendersAnAvatarImage_WhenImageUrlIsPresent()
   {
     var character = new Character(12605, "Jim Hammond", imageUrl: "https://example.com/jim.jpg");
