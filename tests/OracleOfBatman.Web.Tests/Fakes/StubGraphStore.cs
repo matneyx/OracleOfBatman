@@ -34,4 +34,5 @@ public sealed class StubGraphStore(Character? characterToReturn = null) : IGraph
     Task.FromResult<IReadOnlyList<Character>>([]);
 
   public async Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds) => throw new NotImplementedException();
+  public async Task<Character?> GetRandomCharacterAsync(IReadOnlyCollection<int> excludedIds) => throw new NotImplementedException();
 }

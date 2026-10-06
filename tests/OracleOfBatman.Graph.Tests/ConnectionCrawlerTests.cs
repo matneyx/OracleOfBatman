@@ -382,9 +382,31 @@ public class ConnectionCrawlerTests
 
     var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
     var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+    var third = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+
+    Assert.Equal(3, new[] { first!.ComicVineId, second!.ComicVineId, third!.ComicVineId }.Distinct().Count());
+  }
+
+  [Fact]
+  public async Task PickRandomCharacterAsync_AlternatesToATrueRandomPick_OnTheSecondCall()
+  {
+    // Oldest-first alone walks characters in the order a crawl ingested them — long,
+    // often alphabetical stretches. Every other pick comes from real randomness instead.
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(1, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(2, "B",
+      ingestionDateTime: new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(3, "C",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+    graphStore.RandomPicker = candidates => candidates.Single(c => c.ComicVineId == 3);
+    var crawler = Crawler(new FakeComicVineCharacterSource([]), graphStore);
+
+    var first = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
+    var second = await crawler.PickRandomCharacterAsync(excludeCharacterId: null);
 
     Assert.Equal(1, first!.ComicVineId);
-    Assert.Equal(2, second!.ComicVineId);
+    Assert.Equal(3, second!.ComicVineId);
   }
 
   [Fact]

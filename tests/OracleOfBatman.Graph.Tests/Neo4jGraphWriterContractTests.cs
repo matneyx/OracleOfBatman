@@ -109,6 +109,28 @@ public sealed class Neo4jGraphWriterContractTests(Neo4jContainerFixture fixture)
     Assert.Equal(middleId, found!.ComicVineId);
   }
 
+  [Fact]
+  public async Task GetRandomCharacterAsync_PicksOnlyFromIngestedCharactersThatArentExcluded()
+  {
+    // Whole-graph scan, same as the oldest-first picker above — wipe first. With one
+    // excluded and one never-ingested Character, the only legal "random" pick is the third,
+    // so real randomness still gives a deterministic answer.
+    await ClearGraphAsync();
+    var writer = new Neo4jGraphWriter(fixture.Driver);
+    var excludedId = NextId();
+    var neverIngestedId = NextId();
+    var eligibleId = NextId();
+    await writer.UpsertCharacterAsync(new Character(excludedId, "A",
+      ingestionDateTime: new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));
+    await writer.UpsertCharacterAsync(new Character(neverIngestedId, "B"));
+    await writer.UpsertCharacterAsync(new Character(eligibleId, "C",
+      ingestionDateTime: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc)));
+
+    var found = await writer.GetRandomCharacterAsync([excludedId]);
+
+    Assert.Equal(eligibleId, found!.ComicVineId);
+  }
+
   private async Task ClearGraphAsync()
   {
     await using var session = fixture.Driver.AsyncSession();

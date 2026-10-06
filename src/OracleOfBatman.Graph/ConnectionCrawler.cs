@@ -48,6 +48,10 @@ public sealed class ConnectionCrawler(
   // so it covers the seeds and everything the BFS pulled in, not just one phase's finds.
   private readonly HashSet<int> _discoveredIssueIds = [];
 
+  // PickRandomCharacterAsync alternates oldest-ingested and truly random picks; circuit-
+  // scoped like _shownViaRandom, so a page refresh starts over with an oldest pick.
+  private bool _pickOldest = true;
+
   /// <summary>
   ///   Optional narration of what the crawl is doing and what each step costs — off unless
   ///   a host supplies a sink (Console.WriteLine, an ILogger, ...). Deliberately a callback
@@ -375,14 +379,14 @@ public sealed class ConnectionCrawler(
     var excludeIds = new HashSet<int>(_shownViaRandom);
     if (excludeCharacterId is int id) excludeIds.Add(id);
 
-    var picked = await graphStore.GetLeastRecentlyIngestedCharacterAsync(excludeIds);
+    var picked = await PopulatePicked(excludeIds);
 
     if (picked is null && _shownViaRandom.Count > 0)
     {
       // Everyone's been shown — start the rotation over.
       _shownViaRandom.Clear();
-      var retryExcludeIds = excludeCharacterId is int retryId ? new HashSet<int> { retryId } : [];
-      picked = await graphStore.GetLeastRecentlyIngestedCharacterAsync(retryExcludeIds);
+      var retryExcludeIds = excludeCharacterId is int retryId ? new HashSet<int> { retryId } : new HashSet<int>();
+      picked = await PopulatePicked(retryExcludeIds);
     }
 
     if (picked is not null)
@@ -390,6 +394,13 @@ public sealed class ConnectionCrawler(
       _shownViaRandom.Add(picked.ComicVineId);
     }
 
+    // Flipped once per click, never per lookup — a reset's retry must stay in the same mode.
+    _pickOldest = !_pickOldest;
     return picked;
+
+    Task<Character?> PopulatePicked(HashSet<int> excludedIds) =>
+      _pickOldest
+        ? graphStore.GetLeastRecentlyIngestedCharacterAsync(excludedIds)
+        : graphStore.GetRandomCharacterAsync(excludedIds);
   }
 }

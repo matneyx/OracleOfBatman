@@ -165,6 +165,23 @@ public sealed class FakeGraphStore : IGraphStore
     return Task.FromResult(candidate);
   }
 
+  /// <summary>
+  ///   Stands in for real randomness: receives every eligible candidate (ingested, not
+  ///   excluded, ordered by id) and returns the "random" pick. Tests set this to make the
+  ///   pick deterministic; the default takes the last candidate.
+  /// </summary>
+  public Func<IReadOnlyList<Character>, Character> RandomPicker { get; set; } = candidates => candidates[^1];
+
+  public Task<Character?> GetRandomCharacterAsync(IReadOnlyCollection<int> excludedIds)
+  {
+    var candidates = _characters.Values
+      .Where(c => c.IngestionDateTime is not null && !excludedIds.Contains(c.ComicVineId))
+      .OrderBy(c => c.ComicVineId)
+      .ToList();
+
+    return Task.FromResult(candidates.Count == 0 ? null : RandomPicker(candidates));
+  }
+
   private void IncrementUsageCounts(Path path)
   {
     foreach (var bridge in path.Characters.Skip(1).SkipLast(1))

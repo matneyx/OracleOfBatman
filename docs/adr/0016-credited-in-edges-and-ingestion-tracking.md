@@ -190,6 +190,15 @@ existing.
   twice in a row") not a fairness guarantee; a refresh forgiving everyone
   shown so far is a harmless cosmetic quirk, not a bug.
 
+**Amended 2026-10-05:** oldest-first alone walked characters in the order a
+single crawl ingested them (long, often alphabetical stretches), and a
+connected pair never re-ingests on Go, so the same stale characters kept
+resurfacing. The button now alternates per circuit: oldest-ingested, then a
+genuinely random pick (`IGraphStore.GetRandomCharacterAsync`), and so on.
+Both modes share the exclusion rules above. Refreshing `ingestion_date` on
+selection was reconsidered and still rejected: the date means data
+freshness, and stamping it without a fetch would hide stale data.
+
 ## Feedback: `CharacterAdded` stays, `IssueConnectionConfirmed` moves to Go-click time
 
 `CharacterAdded` (fired when a genuinely new Character node is created)

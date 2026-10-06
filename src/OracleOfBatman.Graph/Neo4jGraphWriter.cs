@@ -213,16 +213,7 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
 
       Trace($"GetCharacterAsync took {stopwatch.Elapsed}");
       return await cursor
-        .Select(r => new Character(r["comicVineId"].As<int>(),
-          r["name"].As<string>(),
-          imageUrl: r["imageUrl"].As<string?>(),
-          siteDetailUrl: r["siteDetailUrl"].As<string?>(),
-          seedUseCount: r["seedUseCount"]?.As<int>() ?? 0,
-          bridgeUseCount: r["bridgeUseCount"]?.As<int>() ?? 0,
-          friendIds: r["friendIds"] is null ? [] : [.. r["friendIds"].As<List<object>>().Select(v => v.As<int>())],
-          enemyIds: r["enemyIds"] is null ? [] : [.. r["enemyIds"].As<List<object>>().Select(v => v.As<int>())],
-          ingestionDateTime: r["ingestionDateTime"]?.As<DateTimeOffset>().UtcDateTime
-          ))
+        .Select(ReadCharacter)
         .SingleOrDefaultAsync();
     });
   }
@@ -341,7 +332,7 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
 
   public async Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds)
   {
-    Trace($"GetLeastRecentlyIngestedCharacterAsync for excluded IDs {string.Join(", ", excludedIds)}");
+    Trace($"GetLeastRecentlyIngestedCharacterAsync while excluding IDs: {string.Join(", ", excludedIds)}");
     await using var session = driver.AsyncSession(ConfigureSession);
     var stopwatch = Stopwatch.StartNew();
     return await session.ExecuteReadAsync(async tx =>
@@ -360,19 +351,47 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
 
       Trace($"GetLeastRecentlyIngestedCharacterAsync took {stopwatch.Elapsed}");
 
-      return await cursor.Select(r =>
-        new Character(r["comicVineId"].As<int>(),
-          r["name"].As<string>(),
-          imageUrl: r["imageUrl"].As<string?>(),
-          siteDetailUrl: r["siteDetailUrl"].As<string?>(),
-          seedUseCount: r["seedUseCount"]?.As<int>() ?? 0,
-          bridgeUseCount: r["bridgeUseCount"]?.As<int>() ?? 0,
-          friendIds: r["friendIds"] is null ? [] : [.. r["friendIds"].As<List<object>>().Select(v => v.As<int>())],
-          enemyIds: r["enemyIds"] is null ? [] : [.. r["enemyIds"].As<List<object>>().Select(v => v.As<int>())],
-          ingestionDateTime: r["ingestionDateTime"]?.As<DateTimeOffset>().UtcDateTime
-        )).SingleOrDefaultAsync();
+      return await cursor.Select(ReadCharacter).SingleOrDefaultAsync();
     });
   }
+
+  public async Task<Character?> GetRandomCharacterAsync(IReadOnlyCollection<int> excludedIds)
+  {
+    Trace($"GetRandomCharacterAsync while excluding IDs: {string.Join(", ", excludedIds)}");
+    await using var session = driver.AsyncSession(ConfigureSession);
+    var stopwatch = Stopwatch.StartNew();
+    return await session.ExecuteReadAsync(async tx =>
+    {
+      var cursor = await tx.RunAsync(
+        """
+        MATCH (c:Character)
+        WHERE c.ingestion_date_time IS NOT NULL AND NOT c.comic_vine_id IN $excludedIds
+        RETURN c.comic_vine_id AS comicVineId, c.name AS name, c.image_url AS imageUrl, c.site_detail_url AS siteDetailUrl,
+               c.friend_ids AS friendIds, c.enemy_ids AS enemyIds, c.ingestion_date_time AS ingestionDateTime,
+               c.seed_use_count AS seedUseCount, c.bridge_use_count AS bridgeUseCount
+        ORDER BY rand()
+        LIMIT 1
+        """,
+        new { excludedIds });
+
+      Trace($"GetRandomCharacterAsync took {stopwatch.Elapsed}");
+
+      return await cursor.Select(ReadCharacter).SingleOrDefaultAsync();
+    });
+  }
+
+  // Reads every column the full-Character queries return (GetCharacterAsync and both Random
+  // pickers). SearchCharactersAsync projects fewer columns, so it maps its own rows.
+  private static Character ReadCharacter(IRecord r) =>
+    new(r["comicVineId"].As<int>(),
+      r["name"].As<string>(),
+      imageUrl: r["imageUrl"].As<string?>(),
+      siteDetailUrl: r["siteDetailUrl"].As<string?>(),
+      seedUseCount: r["seedUseCount"]?.As<int>() ?? 0,
+      bridgeUseCount: r["bridgeUseCount"]?.As<int>() ?? 0,
+      friendIds: r["friendIds"] is null ? [] : [.. r["friendIds"].As<List<object>>().Select(v => v.As<int>())],
+      enemyIds: r["enemyIds"] is null ? [] : [.. r["enemyIds"].As<List<object>>().Select(v => v.As<int>())],
+      ingestionDateTime: r["ingestionDateTime"]?.As<DateTimeOffset>().UtcDateTime);
 
   private void ConfigureSession(SessionConfigBuilder builder)
   {

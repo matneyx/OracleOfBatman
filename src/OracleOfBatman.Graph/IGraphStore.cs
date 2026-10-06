@@ -65,11 +65,20 @@ public interface IGraphStore
   Task<IReadOnlyList<Character>> SearchCharactersAsync(string query, int limit = 20);
 
   /// <summary>
-  ///   The Character with the oldest IngestionDateTime, excluding the given ids — the
-  ///   "Random Character" button's actual mechanism (ADR-0016): a disguised
-  ///   least-recently-refreshed picker, not real randomness. Null if every Character is
-  ///   excluded, or none exist. A Character with no IngestionDateTime at all (never
-  ///   actually ingested) is never a candidate — nothing to refresh.
+  ///   The Character with the oldest IngestionDateTime, excluding the given ids — half of
+  ///   the "Random Character" button (ADR-0016): a disguised least-recently-refreshed
+  ///   picker that surfaces stale data. Null if every Character is excluded, or none exist.
+  ///   A Character with no IngestionDateTime at all (never actually ingested) is never a
+  ///   candidate — nothing to refresh.
   /// </summary>
   Task<Character?> GetLeastRecentlyIngestedCharacterAsync(IReadOnlyCollection<int> excludedIds);
+
+  /// <summary>
+  ///   A genuinely random Character, excluding the given ids — the other half of the
+  ///   "Random Character" button, alternated with GetLeastRecentlyIngestedCharacterAsync so
+  ///   the button doesn't walk characters in the order one crawl ingested them. Same
+  ///   eligibility as the oldest-first picker: never-ingested Characters are excluded, and
+  ///   null means nobody's left.
+  /// </summary>
+  Task<Character?> GetRandomCharacterAsync(IReadOnlyCollection<int> excludedIds);
 }
