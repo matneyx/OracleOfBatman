@@ -62,3 +62,8 @@ dotnet watch --project src/OracleOfBatman.Web run
 
 - Web app (dev, hot reload): http://localhost:5204
 - The Graph tests use Testcontainers, so Docker must be running for `dotnet test`.
+
+## Deploying
+
+One small VPS running the same compose file plus Caddy for HTTPS — see
+[docs/DEPLOY.md](./docs/DEPLOY.md).

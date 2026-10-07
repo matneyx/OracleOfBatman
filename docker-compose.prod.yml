@@ -1,0 +1,41 @@
+# Production overrides for a single small VPS. Use with the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# See docs/DEPLOY.md.
+
+services:
+  neo4j:
+    # Never expose Bolt or the Neo4j Browser to the internet; the web app reaches Neo4j
+    # over the compose network.
+    ports: !reset []
+    environment:
+      # Sized for a ~4 GB VPS shared with the web app and Caddy.
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1g
+      NEO4J_server_memory_pagecache_size: 512m
+    restart: unless-stopped
+
+  web:
+    # Only Caddy talks to the web app.
+    ports: !reset []
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - web
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env to the public hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:

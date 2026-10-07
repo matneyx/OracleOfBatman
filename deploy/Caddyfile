@@ -1,0 +1,6 @@
+# SITE_ADDRESS is the public hostname (e.g. oracle.example.com). Caddy fetches and renews
+# the HTTPS certificate itself, and proxies Blazor Server's WebSocket without extra config.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy web:8080
+}
