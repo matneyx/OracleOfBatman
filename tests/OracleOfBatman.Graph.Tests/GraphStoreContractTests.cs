@@ -138,7 +138,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCreditedInAsync(characterAId, [new Issue(issueId, "Some Issue")]);
     await store.UpsertCreditedInAsync(characterBId, [new Issue(issueId, "Some Issue")]);
 
-    var pathExists = await store.PathExistsAsync(characterAId, characterBId);
+    var pathExists = await store.PathExistsAsync(characterAId, characterBId, TestContext.Current.CancellationToken);
     Assert.True(pathExists);
   }
 
@@ -199,7 +199,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterAId, "A"));
     await store.UpsertCharacterAsync(new Character(characterBId, "B"));
 
-    var pathExists = await store.PathExistsAsync(characterAId, characterBId);
+    var pathExists = await store.PathExistsAsync(characterAId, characterBId, TestContext.Current.CancellationToken);
 
     Assert.False(pathExists);
   }
@@ -212,7 +212,7 @@ public abstract class GraphStoreContractTests
     var neverPersistedId = NextId();
     await store.UpsertCharacterAsync(new Character(characterAId, "A"));
 
-    var pathExists = await store.PathExistsAsync(characterAId, neverPersistedId);
+    var pathExists = await store.PathExistsAsync(characterAId, neverPersistedId, TestContext.Current.CancellationToken);
 
     Assert.False(pathExists);
   }
@@ -229,7 +229,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterBId, "B"));
     await store.UpsertCreditedInAsync(characterBId, [new Issue(issueId, "Some Issue")]);
 
-    var pathExists = await store.PathExistsAsync(characterAId, characterBId);
+    var pathExists = await store.PathExistsAsync(characterAId, characterBId, TestContext.Current.CancellationToken);
 
     Assert.True(pathExists);
   }
@@ -250,7 +250,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    var pathExists = await store.PathExistsAsync(characterAId, characterCId);
+    var pathExists = await store.PathExistsAsync(characterAId, characterCId, TestContext.Current.CancellationToken);
 
     Assert.True(pathExists);
   }
@@ -263,7 +263,7 @@ public abstract class GraphStoreContractTests
     var neverPersistedId = NextId();
     await store.UpsertCharacterAsync(new Character(characterAId, "A"));
 
-    var path = await store.FindShortestPathAsync(characterAId, neverPersistedId, 5);
+    var path = await store.FindShortestPathAsync(characterAId, neverPersistedId, 5, TestContext.Current.CancellationToken);
 
     Assert.Null(path);
   }
@@ -277,7 +277,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterAId, "A"));
     await store.UpsertCharacterAsync(new Character(characterBId, "B"));
 
-    var path = await store.FindShortestPathAsync(characterAId, characterBId, 5);
+    var path = await store.FindShortestPathAsync(characterAId, characterBId, 5, TestContext.Current.CancellationToken);
 
     Assert.Null(path);
   }
@@ -296,7 +296,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(characterB);
     await store.UpsertCreditedInAsync(characterBId, [new Issue(issueId, "Some Issue")]);
 
-    var path = await store.FindShortestPathAsync(characterAId, characterBId, 5);
+    var path = await store.FindShortestPathAsync(characterAId, characterBId, 5, TestContext.Current.CancellationToken);
 
     Assert.NotNull(path);
     Assert.Equal(1, path.BatmanNumber);
@@ -324,7 +324,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    var path = await store.FindShortestPathAsync(characterAId, characterCId, 5);
+    var path = await store.FindShortestPathAsync(characterAId, characterCId, 5, TestContext.Current.CancellationToken);
 
     Assert.NotNull(path);
     // Comparing ids, not full record equality — B is an intermediate Character, so
@@ -355,7 +355,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    var path = await store.FindShortestPathAsync(characterAId, characterCId, 1);
+    var path = await store.FindShortestPathAsync(characterAId, characterCId, 1, TestContext.Current.CancellationToken);
 
     Assert.Null(path);
   }
@@ -376,7 +376,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    await store.FindShortestPathAsync(characterAId, characterCId, 5);
+    await store.FindShortestPathAsync(characterAId, characterCId, 5, TestContext.Current.CancellationToken);
 
     Assert.Equal(0, (await store.GetCharacterAsync(characterAId))!.BridgeUseCount);
     Assert.Equal(1, (await store.GetCharacterAsync(characterBId))!.BridgeUseCount);
@@ -399,7 +399,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    await store.FindShortestPathAsync(characterAId, characterCId, 5);
+    await store.FindShortestPathAsync(characterAId, characterCId, 5, TestContext.Current.CancellationToken);
 
     Assert.Equal(1, (await store.GetIssueAsync(issue1Id))!.PathUseCount);
     Assert.Equal(1, (await store.GetIssueAsync(issue2Id))!.PathUseCount);
@@ -417,7 +417,7 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterBId, "B"));
     await store.UpsertCreditedInAsync(characterBId, [new Issue(NextId(), "Issue 2")]);
 
-    await store.FindShortestPathAsync(characterAId, characterBId, 5);
+    await store.FindShortestPathAsync(characterAId, characterBId, 5, TestContext.Current.CancellationToken);
 
     Assert.Equal(0, (await store.GetCharacterAsync(characterAId))!.BridgeUseCount);
     Assert.Equal(0, (await store.GetIssueAsync(issueId))!.PathUseCount);
@@ -441,8 +441,8 @@ public abstract class GraphStoreContractTests
     await store.UpsertCharacterAsync(new Character(characterCId, "C"));
     await store.UpsertCreditedInAsync(characterCId, [new Issue(issue2Id, "Issue 2")]);
 
-    await store.FindShortestPathAsync(characterAId, characterCId, 5);
-    await store.FindShortestPathAsync(characterAId, characterCId, 5);
+    await store.FindShortestPathAsync(characterAId, characterCId, 5, TestContext.Current.CancellationToken);
+    await store.FindShortestPathAsync(characterAId, characterCId, 5, TestContext.Current.CancellationToken);
 
     Assert.Equal(2, (await store.GetCharacterAsync(characterBId))!.BridgeUseCount);
   }

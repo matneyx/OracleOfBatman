@@ -17,14 +17,14 @@ public sealed class Neo4jContainerFixture : IAsyncLifetime
 
   public IDriver Driver { get; private set; } = null!;
 
-  public async Task InitializeAsync()
+  public async ValueTask InitializeAsync()
   {
     await _container.StartAsync();
     // Testcontainers' Neo4jBuilder defaults NEO4J_AUTH to "none" — no credentials needed.
     Driver = GraphDatabase.Driver(_container.GetConnectionString(), AuthTokens.None);
   }
 
-  public async Task DisposeAsync()
+  public async ValueTask DisposeAsync()
   {
     await Driver.DisposeAsync();
     await _container.DisposeAsync();

@@ -18,48 +18,49 @@ public sealed class ComicVineApiClient(
   IComicVineIssueSource, IComicVineCharacterSearchSource
 {
 
-  public async Task<IReadOnlyList<ComicVineSearchCharacterResult>> SearchCharactersAsync(string query)
+  public async Task<IReadOnlyList<ComicVineSearchCharacterResult>> SearchCharactersAsync(string query,
+    CancellationToken token)
   {
-    await searchRateLimiter.WaitForSlotAsync();
+    await searchRateLimiter.WaitForSlotAsync(token);
 
     var requestUri =
       $"search/?api_key={apiKey}&format=xml&resources=character" +
       $"&query={Uri.EscapeDataString(query)}&field_list=id,name,site_detail_url,image";
 
-    using var response = await httpClient.GetAsync(requestUri);
+    using var response = await httpClient.GetAsync(requestUri, token);
     response.EnsureSuccessStatusCode();
 
-    await using var stream = await response.Content.ReadAsStreamAsync();
+    await using var stream = await response.Content.ReadAsStreamAsync(token);
     return ComicVineXmlReader.ReadSearchResults(stream);
   }
 
-  public async Task<ComicVineCharacter> GetCharacterAsync(int comicVineId)
+  public async Task<ComicVineCharacter> GetCharacterAsync(int comicVineId, CancellationToken token)
   {
-    await characterRateLimiter.WaitForSlotAsync();
+    await characterRateLimiter.WaitForSlotAsync(token);
 
     var requestUri =
       $"character/4005-{comicVineId}/?api_key={apiKey}&format=xml" +
       "&field_list=id,name,site_detail_url,image,character_friends,character_enemies,issue_credits";
 
-    using var response = await httpClient.GetAsync(requestUri);
+    using var response = await httpClient.GetAsync(requestUri, token);
     response.EnsureSuccessStatusCode();
 
-    await using var stream = await response.Content.ReadAsStreamAsync();
+    await using var stream = await response.Content.ReadAsStreamAsync(token);
     return ComicVineXmlReader.ReadCharacter(stream);
   }
 
-  public async Task<ComicVineIssue> GetIssueAsync(int comicVineId)
+  public async Task<ComicVineIssue> GetIssueAsync(int comicVineId, CancellationToken token)
   {
-    await issueRateLimiter.WaitForSlotAsync();
+    await issueRateLimiter.WaitForSlotAsync(token);
 
     var requestUri =
       $"issue/4000-{comicVineId}/?api_key={apiKey}&format=xml" +
       "&field_list=id,name,cover_date,image,volume";
 
-    using var response = await httpClient.GetAsync(requestUri);
+    using var response = await httpClient.GetAsync(requestUri, token);
     response.EnsureSuccessStatusCode();
 
-    await using var stream = await response.Content.ReadAsStreamAsync();
+    await using var stream = await response.Content.ReadAsStreamAsync(token);
     return ComicVineXmlReader.ReadIssue(stream);
   }
 }

@@ -59,11 +59,14 @@ public sealed class ConnectionCrawler(
   /// </summary>
   private void Trace(string message) => trace?.Invoke(message);
 
-  public async Task<CrawlResult> PopulateConnectionsAsync(int seedAComicVineId, int seedBComicVineId, int budget)
+  public async Task<CrawlResult> PopulateConnectionsAsync(int seedAComicVineId, int seedBComicVineId, int budget,
+    CancellationToken token)
   {
+    token.ThrowIfCancellationRequested();
+
     Trace($"Crawl start: seeds {seedAComicVineId} and {seedBComicVineId}, budget {budget}.");
 
-    if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
+    if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId, token))
     {
       Trace("Already connected in the graph — nothing to fetch.");
       return new CrawlResult(true, 0);
@@ -71,15 +74,14 @@ public sealed class ConnectionCrawler(
 
     // The two seed fetches aren't counted against the expansion budget — the budget is
     // for new characters discovered beyond the seeds (ADR-0010).
-    var seedATask = IngestCharacterAsync(seedAComicVineId);
-    var seedBTask = IngestCharacterAsync(seedBComicVineId);
-
+    var seedATask = IngestCharacterAsync(seedAComicVineId, token);
+    var seedBTask = IngestCharacterAsync(seedBComicVineId, token);
     await Task.WhenAll(seedATask, seedBTask);
 
     var seedA = seedATask.Result;
     var seedB = seedBTask.Result;
 
-    if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
+    if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId, token))
     {
       Trace("Seeds share an issue directly — connected after the two seed fetches.");
       return new CrawlResult(true, 0);
@@ -90,7 +92,7 @@ public sealed class ConnectionCrawler(
     EnqueueFrontier(_frontierB, seedB);
 
     var (connected, fetched) =
-      await PopulateFromCommonNeighborsAsync(seedAComicVineId, seedBComicVineId, budget);
+      await PopulateFromCommonNeighborsAsync(seedAComicVineId, seedBComicVineId, budget, token);
     if (connected)
     {
       Trace($"Connected via a shared friend/enemy. Spent {fetched} character fetch(es).");
@@ -99,7 +101,7 @@ public sealed class ConnectionCrawler(
     Trace("Path does not exist between the seeds after searching common neighbors. Escalting to BFS for friends and enemies.");
 
     (connected, fetched) =
-      await PopulateFromBidirectionalBfsAsync(seedAComicVineId, seedBComicVineId, budget, fetched);
+      await PopulateFromBidirectionalBfsAsync(seedAComicVineId, seedBComicVineId, budget, fetched, token);
     if (connected)
     {
       Trace($"Connected via the friend/enemy BFS. Spent {fetched} character fetch(es).");
@@ -109,7 +111,7 @@ public sealed class ConnectionCrawler(
 
     // Friends and enemies are exhausted (or never existed) — the only signal left is who
     // else is credited in the issues discovered so far (ADR-0014 steps 4-5).
-    var result = await EscalateViaIssueCastsAsync(seedAComicVineId, seedBComicVineId, budget, fetched);
+    var result = await EscalateViaIssueCastsAsync(seedAComicVineId, seedBComicVineId, budget, fetched, token);
 
     Trace(result.Connected
       ? $"Connected via issue-cast escalation. Spent {result.CharactersFetched} character fetch(es) and {result.IssuesFetched} issue cast(s)."
@@ -122,9 +124,11 @@ public sealed class ConnectionCrawler(
   ///   Direct friend/enemy overlap between the seeds: the cheapest, highest-confidence
   ///   bridge candidates, so they're spent on first.
   /// </summary>
-  private async Task<(bool Connected, int CharactersFetched)> PopulateFromCommonNeighborsAsync(
-    int seedAComicVineId, int seedBComicVineId, int budget)
+  private async Task<(bool Connected, int CharactersFetched)> PopulateFromCommonNeighborsAsync(int seedAComicVineId,
+    int seedBComicVineId, int budget, CancellationToken token)
   {
+    token.ThrowIfCancellationRequested();
+
     var fetched = 0;
     var common = _frontierA.Intersect(_frontierB).ToList();
     Trace($"Direct friend/enemy overlap: {common.Count} shared candidate(s).");
@@ -142,10 +146,14 @@ public sealed class ConnectionCrawler(
         continue;
       }
 
-      await IngestCharacterAsync(candidateId);
+      var sharedFriend = await TryIngestCandidateAsync(candidateId, token);
       fetched++;
+      if (sharedFriend is null)
+      {
+        continue;
+      }
 
-      if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
+      if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId, token))
       {
         return (true, fetched);
       }
@@ -158,9 +166,10 @@ public sealed class ConnectionCrawler(
   ///   ADR-0010's bidirectional BFS: expand whichever frontier is smaller, one new
   ///   character at a time.
   /// </summary>
-  private async Task<(bool Connected, int CharactersFetched)> PopulateFromBidirectionalBfsAsync(
-    int seedAComicVineId, int seedBComicVineId, int budget, int fetched)
+  private async Task<(bool Connected, int CharactersFetched)> PopulateFromBidirectionalBfsAsync(int seedAComicVineId,
+    int seedBComicVineId, int budget, int fetched, CancellationToken token)
   {
+    token.ThrowIfCancellationRequested();
     Trace($"Bidirectional BFS: frontier A has {_frontierA.Count}, frontier B has {_frontierB.Count}.");
 
     while (fetched < budget && (_frontierA.Count > 0 || _frontierB.Count > 0))
@@ -172,12 +181,17 @@ public sealed class ConnectionCrawler(
         continue;
       }
 
-      var newCharacter = await IngestCharacterAsync(candidateId.Value);
+      var newCharacter = await TryIngestCandidateAsync(candidateId.Value, token);
       fetched++;
+      if (newCharacter is null)
+      {
+        continue;
+      }
+
       Trace($"  BFS expanded side {side} to {newCharacter.Name} ({candidateId}) [{fetched}/{budget}].");
       EnqueueFrontier(side == Side.A ? _frontierA : _frontierB, newCharacter);
 
-      if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
+      if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId, token))
       {
         return (true, fetched);
       }
@@ -192,8 +206,10 @@ public sealed class ConnectionCrawler(
   ///   issues join the pool, so this keeps walking outward until the shared budget runs out.
   /// </summary>
   private async Task<CrawlResult> EscalateViaIssueCastsAsync(int seedAComicVineId, int seedBComicVineId,
-    int budget, int charactersFetched)
+    int budget, int charactersFetched, CancellationToken token)
   {
+    token.ThrowIfCancellationRequested();
+
     var issuesFetched = 0;
     var pendingIssueIds = new Queue<int>(_discoveredIssueIds);
     var queuedIssueIds = new HashSet<int>(pendingIssueIds);
@@ -221,7 +237,7 @@ public sealed class ConnectionCrawler(
       var castWasKnown = issue.CharacterCredits.Length > 0;
       if (!castWasKnown)
       {
-        issue = await issueEnrichmentService.EnrichIfNeededAsync(issue);
+        issue = await issueEnrichmentService.EnrichIfNeededAsync(issue, token);
         issuesFetched++;
       }
 
@@ -249,10 +265,14 @@ public sealed class ConnectionCrawler(
 
         Trace($"    Character {candidateId} is credited in {StrongCandidateCastAppearancesMin} casts —"
           + " fetching it.");
-        var candidate = await IngestCharacterAsync(candidateId);
+        var candidate = await TryIngestCandidateAsync(candidateId, token);
         charactersFetched++;
+        if (candidate is null)
+        {
+          continue;
+        }
 
-        if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId))
+        if (await graphStore.PathExistsAsync(seedAComicVineId, seedBComicVineId, token))
         {
           return new CrawlResult(true, charactersFetched, issuesFetched);
         }
@@ -330,14 +350,39 @@ public sealed class ConnectionCrawler(
   }
 
   /// <summary>
+  ///   IngestCharacterAsync for a crawl candidate, where one bad Comic Vine record shouldn't
+  ///   sink the whole crawl: any failure but cancellation is traced, the id is marked visited
+  ///   so no other route re-fetches it, and null comes back so the caller moves on. Seeds and
+  ///   user-picked characters call IngestCharacterAsync directly — for them, failing loudly
+  ///   is right.
+  /// </summary>
+  private async Task<ComicVineCharacter?> TryIngestCandidateAsync(int comicVineId, CancellationToken token)
+  {
+    try
+    {
+      return await IngestCharacterAsync(comicVineId, token);
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+      _visited.Add(comicVineId);
+      Trace($"  Skipping {comicVineId}: Comic Vine fetch failed ({ex.Message}).");
+      return null;
+    }
+  }
+
+  /// <summary>
   ///   Ensures a character is fully persisted (Character node + issue_credits) and
   ///   checked for overlaps against the whole graph (ADR-0012). Public because it's also
   ///   useful standalone — e.g. seeding a single character picked from a Comic Vine search
   ///   that isn't in our graph yet at all.
   /// </summary>
-  public async Task<ComicVineCharacter> IngestCharacterAsync(int comicVineId)
+  public async Task<ComicVineCharacter> IngestCharacterAsync(int comicVineId, CancellationToken token)
   {
-    var character = await characterSource.GetCharacterAsync(comicVineId);
+    token.ThrowIfCancellationRequested();
+    // Logged before the fetch, not after: when Comic Vine sends something unparseable,
+    // this is the only line that says which character it was.
+    Trace($"Fetching character {comicVineId} from Comic Vine");
+    var character = await characterSource.GetCharacterAsync(comicVineId, token);
     _visited.Add(comicVineId);
 
     Trace($"Ingesting {character.Name} (id {comicVineId})");
@@ -402,5 +447,31 @@ public sealed class ConnectionCrawler(
       _pickOldest
         ? graphStore.GetLeastRecentlyIngestedCharacterAsync(excludedIds)
         : graphStore.GetRandomCharacterAsync(excludedIds);
+  }
+
+  public async Task RefreshIfStaleAsync(int comicVineId, CancellationToken token)
+  {
+    var character = await graphStore.GetCharacterAsync(comicVineId);
+
+    if (character is null)
+    {
+      Trace($"RefreshIfStaleAsync: character {comicVineId} not found in graph. Ingesting...");
+      await IngestCharacterAsync(comicVineId, token);
+      return;
+    }
+
+    if (character.IngestionDateTime is null)
+    {
+      Trace($"RefreshIfStaleAsync: character {comicVineId} has no IngestionDateTime. Ingesting...");
+      await IngestCharacterAsync(comicVineId, token);
+      return;
+    }
+
+    var age = _timeProvider.GetUtcNow().UtcDateTime - character.IngestionDateTime.Value;
+    if (age > TimeSpan.FromHours(1))
+    {
+      Trace($"Refreshing stale character {character.Name} (id {comicVineId}), last ingested {age.TotalHours:F1} hours ago.");
+      await IngestCharacterAsync(comicVineId, token);
+    }
   }
 }

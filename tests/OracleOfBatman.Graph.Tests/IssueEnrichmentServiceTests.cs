@@ -21,7 +21,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal(issue, result);
     Assert.Empty(issueSource.FetchedIds);
@@ -43,7 +43,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal("https://example.com/cover.jpg", result.ImageUrl);
     Assert.Equal(9, result.VolumeId);
@@ -69,7 +69,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal("TPB", result.Name);
   }
@@ -88,7 +88,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal("A Real Issue Name", result.Name);
   }
@@ -113,7 +113,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal("https://comicvine.gamespot.com/some-issue/4000-500/", result.SiteDetailUrl);
     Assert.Equal("The Volume Title", result.VolumeName);
@@ -141,7 +141,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal([12605, 157242], result.CharacterCredits);
   }
@@ -157,7 +157,7 @@ public class IssueEnrichmentServiceTests
     var graphStore = new FakeGraphStore();
     var service = new IssueEnrichmentService(issueSource, graphStore);
 
-    var result = await service.EnrichIfNeededAsync(issue);
+    var result = await service.EnrichIfNeededAsync(issue, TestContext.Current.CancellationToken);
 
     Assert.Equal(issue, result);
   }

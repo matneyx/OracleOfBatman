@@ -14,9 +14,9 @@ public class ComicVineRateLimiterTests
   {
     var limiter = new ComicVineRateLimiter(2, TimeSpan.FromMinutes(1));
 
-    await limiter.WaitForSlotAsync();
-    await limiter.WaitForSlotAsync();
-    var thirdSlot = limiter.WaitForSlotAsync();
+    await limiter.WaitForSlotAsync(TestContext.Current.CancellationToken);
+    await limiter.WaitForSlotAsync(TestContext.Current.CancellationToken);
+    var thirdSlot = limiter.WaitForSlotAsync(TestContext.Current.CancellationToken);
 
     // Proving it's genuinely blocked (not proving how long) — a short real-time race
     // against Task.Delay avoids needing a fake clock for this first test.
@@ -34,10 +34,10 @@ public class ComicVineRateLimiterTests
     await limiter.WaitForSlotAsync(cts.Token);
     // Cancelling *after* the permit was already granted must not block its eventual
     // release — the token was only ever meant to guard the wait itself.
-    cts.Cancel();
+    await cts.CancelAsync();
 
-    var nextSlot = limiter.WaitForSlotAsync();
-    var completed = await Task.WhenAny(nextSlot, Task.Delay(TimeSpan.FromMilliseconds(500)));
+    var nextSlot = limiter.WaitForSlotAsync(TestContext.Current.CancellationToken);
+    var completed = await Task.WhenAny(nextSlot, Task.Delay(TimeSpan.FromMilliseconds(500), TestContext.Current.CancellationToken));
 
     Assert.Same(nextSlot, completed);
   }

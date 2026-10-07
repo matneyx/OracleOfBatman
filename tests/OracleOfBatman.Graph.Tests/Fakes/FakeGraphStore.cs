@@ -20,7 +20,7 @@ public sealed class FakeGraphStore : IGraphStore
 
   public IReadOnlyList<Character> Characters => [.. _characters.Values];
 
-  public Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId)
+  public Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId, CancellationToken token)
   {
     if (!_characters.ContainsKey(characterAComicVineId) || !_characters.ContainsKey(characterBComicVineId))
     {
@@ -51,7 +51,8 @@ public sealed class FakeGraphStore : IGraphStore
     return Task.FromResult(characterAComicVineId == characterBComicVineId);
   }
 
-  public async Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth)
+  public async Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth,
+    CancellationToken token)
   {
     var visited = new HashSet<int> { characterAComicVineId };
     var parent = new Dictionary<int, (int PreviousCharacterId, int IssueId)>();

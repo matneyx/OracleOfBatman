@@ -11,7 +11,7 @@ public sealed class ComicVineRateLimiter(int maxRequestsPerWindow, TimeSpan wind
 {
   private readonly SemaphoreSlim _semaphore = new(maxRequestsPerWindow, maxRequestsPerWindow);
 
-  public async Task WaitForSlotAsync(CancellationToken token = default)
+  public async Task WaitForSlotAsync(CancellationToken token)
   {
     await _semaphore.WaitAsync(token);
     // Once granted, the permit's return is unconditional — CancellationToken.None on both

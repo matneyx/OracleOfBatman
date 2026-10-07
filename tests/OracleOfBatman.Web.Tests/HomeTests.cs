@@ -23,7 +23,7 @@ public class HomeTests : BunitContext, IAsyncLifetime
     JSInterop.Setup<int>("mudpopoverHelper.countProviders");
   }
 
-  public Task InitializeAsync() => Task.CompletedTask;
+  public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
   public new async Task DisposeAsync() => await base.DisposeAsync();
 

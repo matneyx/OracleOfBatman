@@ -6,5 +6,5 @@ namespace OracleOfBatman.Graph.ComicVine;
 /// </summary>
 public interface IComicVineCharacterSource
 {
-  Task<ComicVineCharacter> GetCharacterAsync(int comicVineId);
+  Task<ComicVineCharacter> GetCharacterAsync(int comicVineId, CancellationToken token);
 }

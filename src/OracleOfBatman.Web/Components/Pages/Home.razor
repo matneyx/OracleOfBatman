@@ -6,6 +6,7 @@
 @inject IGraphStore GraphStore
 @inject IServiceProvider ServiceProvider
 @inject ISnackbar Snackbar
+@inject ILogger<Home> Logger
 @implements IDisposable
 
 <PageTitle>Oracle of Batman</PageTitle>
@@ -47,9 +48,9 @@
   </MudItem>
   <MudItem xs="12" sm="2" Class="d-flex align-center">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
-               Disabled="@(_characterA is null || _characterB is null)"
+               Disabled="@(_characterA is null || _characterB is null || _isSearching || _connecting)"
                OnClick="FindPathAsync" data-testid="go-button">
-      Go
+      @(_isSearching ? "Searching…" : "Go")
     </MudButton>
   </MudItem>
 </MudGrid>
@@ -86,10 +87,10 @@
           <CharacterCard Character="ToCharacter(result)"/>
         </div>
         <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_ingesting"
-                   OnClick="@(() => UseComicVineResultAsync(result, true))">Use as A
+                   OnClick="@(() => UseComicVineResultAsync(result, true, _token))">Use as A
         </MudButton>
         <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_ingesting"
-                   OnClick="@(() => UseComicVineResultAsync(result, false))">Use as B
+                   OnClick="@(() => UseComicVineResultAsync(result, false, _token))">Use as B
         </MudButton>
       </MudPaper>
     }
@@ -122,7 +123,7 @@
     <MudAlert Severity="Severity.Info" Class="mb-2">Not enough data yet for this pair.</MudAlert>
     @if (_connectionCrawler is not null)
     {
-      <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="TryToConnectAsync" Disabled="_connecting">
+      <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="() => TryToConnectAsync()" Disabled="_connecting">
         @(_connecting ? "Searching for a connection..." : "Try to find a connection")
       </MudButton>
     }
@@ -150,6 +151,10 @@
   private IComicVineCharacterSource? _comicVineCharacterSource;
   private ConnectionCrawler? _connectionCrawler;
   private IssueEnrichmentService? _issueEnrichmentService;
+  private bool _isSearching;
+
+  private CancellationTokenSource? _cts;
+  protected CancellationToken _token => (_cts ??= new()).Token;
 
   protected override async Task OnInitializedAsync()
   {
@@ -196,15 +201,31 @@
 
     try
     {
-      _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
+      Snackbar.Add($"Searching for a path between {_characterA.Name} and {_characterB.Name}…", Severity.Info);
+
+      _isSearching = true;
+
+      if (_connectionCrawler is not null)
+      {
+        var characterATask = _connectionCrawler.RefreshIfStaleAsync(_characterA.ComicVineId, _token);
+        var characterBTask = _connectionCrawler.RefreshIfStaleAsync(_characterB.ComicVineId, _token);
+        await Task.WhenAll(characterATask, characterBTask);
+      }
+
+      _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth, _token);
       _searched = true;
-      await EnrichPathIssuesAsync();
+      await EnrichPathIssuesAsync(_token);
     }
     catch (Exception ex)
     {
       // A dead circuit takes the whole session down with it (see the incident that
       // motivated this) — better to surface the failure and let the user retry.
+      Logger.LogError(ex, "Finding a path between {CharacterA} and {CharacterB} failed", _characterA?.ComicVineId, _characterB?.ComicVineId);
       Snackbar.Add($"Something went wrong finding a path: {ex.Message}", Severity.Error);
+    }
+    finally
+    {
+      _isSearching = false;
     }
   }
 
@@ -221,18 +242,26 @@
 
     try
     {
-      var result = await _connectionCrawler.PopulateConnectionsAsync(_characterA.ComicVineId, _characterB.ComicVineId, ConnectBudget);
-      _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth);
-      await EnrichPathIssuesAsync();
+      using var attempt = CancellationTokenSource.CreateLinkedTokenSource(_token);
+      attempt.CancelAfter(TimeSpan.FromMinutes(2));
+
+      var result = await _connectionCrawler.PopulateConnectionsAsync(_characterA.ComicVineId, _characterB.ComicVineId, ConnectBudget, attempt.Token);
+      _path = await GraphStore.FindShortestPathAsync(_characterA.ComicVineId, _characterB.ComicVineId, MaxDepth, attempt.Token);
+      await EnrichPathIssuesAsync(attempt.Token);
 
       Snackbar.Add(
         result.Connected ? "Found a connection!" : $"No connection found after checking {result.CharactersFetched} character(s).",
         result.Connected ? Severity.Success : Severity.Warning);
     }
+    catch(OperationCanceledException) when (!_token.IsCancellationRequested)
+    {
+      Snackbar.Add($"Gave up searching for a connection after 2 minutes.", Severity.Warning);
+    }
     catch (Exception ex)
     {
       // A dead circuit takes the whole session down with it (see the incident that
       // motivated this) — better to surface the failure and let the user retry.
+      Logger.LogError(ex, "Crawling for a connection between {CharacterA} and {CharacterB} failed", _characterA?.ComicVineId, _characterB?.ComicVineId);
       Snackbar.Add($"Something went wrong while searching for a connection: {ex.Message}", Severity.Error);
     }
     finally
@@ -241,7 +270,7 @@
     }
   }
 
-  private async Task EnrichPathIssuesAsync()
+  private async Task EnrichPathIssuesAsync(CancellationToken token)
   {
     if (_issueEnrichmentService is null || _path is null)
     {
@@ -251,8 +280,8 @@
     var enrichedHops = new List<Hop>();
     foreach (var hop in _path.Hops)
     {
-      var enrichedIssue = await _issueEnrichmentService.EnrichIfNeededAsync(hop.Issue);
-      enrichedHops.Add(new Hop(hop.From, hop.To, enrichedIssue));
+      var enrichedIssue = await _issueEnrichmentService.EnrichIfNeededAsync(hop.Issue, token);
+      enrichedHops.Add(hop with { Issue = enrichedIssue });
       Snackbar.Add($"Connected via {enrichedIssue.ToDisplayName()}", Severity.Success);
     }
 
@@ -271,13 +300,14 @@
 
     try
     {
-      _comicVineResults = await _comicVineSearchSource.SearchCharactersAsync(_comicVineQuery);
+      _comicVineResults = await _comicVineSearchSource.SearchCharactersAsync(_comicVineQuery, _token);
       _comicVineSearched = true;
     }
     catch (Exception ex)
     {
       // A dead circuit takes the whole session down with it (see the incident that
       // motivated this) — better to surface the failure and let the user retry.
+      Logger.LogError(ex, "Comic Vine search for {Query} failed", _comicVineQuery);
       Snackbar.Add($"Something went wrong searching Comic Vine: {ex.Message}", Severity.Error);
     }
     finally
@@ -286,7 +316,7 @@
     }
   }
 
-  private async Task UseComicVineResultAsync(ComicVineSearchCharacterResult result, bool forCharacterA)
+  private async Task UseComicVineResultAsync(ComicVineSearchCharacterResult result, bool forCharacterA, CancellationToken token)
   {
     if (_comicVineCharacterSource is null)
     {
@@ -301,7 +331,7 @@
     {
       // Ensures the character is fully persisted and connected to the rest of the graph
       // (ADR-0012's overlap check), not just referenced by name.
-      var ingested = await _connectionCrawler.IngestCharacterAsync(result.Id);
+      var ingested = await _connectionCrawler.IngestCharacterAsync(result.Id, token);
       var domainCharacter = ingested.ToDomain();
 
       if (forCharacterA)
@@ -322,6 +352,7 @@
     {
       // A dead circuit takes the whole session down with it (see the incident that
       // motivated this) — better to surface the failure and let the user retry.
+      Logger.LogError(ex, "Fetching Comic Vine character {CharacterId} failed", result.Id);
       Snackbar.Add($"Something went wrong fetching {result.Name}: {ex.Message}", Severity.Error);
     }
     finally
@@ -345,6 +376,13 @@
 
   public void Dispose()
   {
+    if (_cts != null)
+    {
+      _cts.Cancel();
+      _cts.Dispose();
+      _cts = null;
+    }
+
     Snackbar?.Dispose();
 
     _connectionCrawler?.CharacterAdded -= CharacterAdded;

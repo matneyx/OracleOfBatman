@@ -35,7 +35,7 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    var character = await client.GetCharacterAsync(157242);
+    var character = await client.GetCharacterAsync(157242, TestContext.Current.CancellationToken);
 
     Assert.Equal(157242, character.Id);
     Assert.Equal("Jeff the Land Shark", character.Name);
@@ -55,7 +55,7 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    await client.GetCharacterAsync(157242);
+    await client.GetCharacterAsync(157242, TestContext.Current.CancellationToken);
 
     Assert.NotNull(capturedRequest);
     var requestUri = capturedRequest!.RequestUri!.ToString();
@@ -75,7 +75,7 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCharacterAsync(157242));
+    await Assert.ThrowsAsync<HttpRequestException>(() => client.GetCharacterAsync(157242, TestContext.Current.CancellationToken));
   }
 
   [Fact]
@@ -99,7 +99,7 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    var issue = await client.GetIssueAsync(739613);
+    var issue = await client.GetIssueAsync(739613, TestContext.Current.CancellationToken);
 
     Assert.Equal(739613, issue.Id);
     Assert.NotNull(capturedRequest);
@@ -132,7 +132,7 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    var results = await client.SearchCharactersAsync("blood rayne");
+    var results = await client.SearchCharactersAsync("blood rayne", TestContext.Current.CancellationToken);
 
     var match = Assert.Single(results);
     Assert.Equal(46793, match.Id);
@@ -159,15 +159,15 @@ public class ComicVineApiClientTests
     var client = new ComicVineApiClient(httpClient, "test-key", characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
 
-    await client.GetCharacterAsync(157242); // consumes the character resource's only slot
+    await client.GetCharacterAsync(157242, TestContext.Current.CancellationToken); // consumes the character resource's only slot
 
-    var secondCharacterCall = client.GetCharacterAsync(12605);
+    var secondCharacterCall = client.GetCharacterAsync(12605, TestContext.Current.CancellationToken);
     var secondCharacterCompleted = await Task.WhenAny(secondCharacterCall, Task.Delay(TimeSpan.FromMilliseconds(200)));
     Assert.NotSame(secondCharacterCall, secondCharacterCompleted);
 
     // A different resource (issue) must not be throttled by the character resource's
     // exhausted limit.
-    var issueCall = client.GetIssueAsync(739613);
+    var issueCall = client.GetIssueAsync(739613, TestContext.Current.CancellationToken);
     var issueCallCompleted = await Task.WhenAny(issueCall, Task.Delay(TimeSpan.FromMilliseconds(200)));
     Assert.Same(issueCall, issueCallCompleted);
   }

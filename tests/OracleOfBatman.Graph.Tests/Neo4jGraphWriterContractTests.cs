@@ -72,7 +72,7 @@ public sealed class Neo4jGraphWriterContractTests(Neo4jContainerFixture fixture)
       siteDetailUrl: "https://comicvine.gamespot.com/some-issue/4000-739613/", volumeId: 9,
       volumeName: "The Volume Title"));
 
-    var path = await writer.FindShortestPathAsync(characterAId, characterBId, 5);
+    var path = await writer.FindShortestPathAsync(characterAId, characterBId, 5, TestContext.Current.CancellationToken);
 
     Assert.NotNull(path);
     Assert.Equal(characterA, path.Characters[0]);

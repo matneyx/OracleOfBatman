@@ -11,7 +11,7 @@ namespace OracleOfBatman.Graph;
 /// </summary>
 public interface IGraphStore
 {
-  Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId);
+  Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId, CancellationToken token);
 
   /// <summary>
   ///   Null covers every "not enough data" case (either character unseeded, or no
@@ -21,7 +21,8 @@ public interface IGraphStore
   ///   Character and PathUseCount for every hop's Issue — every successful call counts,
   ///   including a repeat lookup of an already-known path (ADR-0016).
   /// </summary>
-  Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth);
+  Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth,
+    CancellationToken token);
 
   /// <summary>
   ///   Bumps SeedUseCount for both Characters — called once per search attempt (Go-click

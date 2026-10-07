@@ -8,6 +8,7 @@ namespace OracleOfBatman.Web.Tests.Fakes;
 /// </summary>
 public sealed class StubComicVineCharacterSearchSource : IComicVineCharacterSearchSource
 {
-  public Task<IReadOnlyList<ComicVineSearchCharacterResult>> SearchCharactersAsync(string query) =>
+  public Task<IReadOnlyList<ComicVineSearchCharacterResult>> SearchCharactersAsync(string query,
+    CancellationToken token) =>
     Task.FromResult<IReadOnlyList<ComicVineSearchCharacterResult>>([]);
 }

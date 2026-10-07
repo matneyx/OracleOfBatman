@@ -6,7 +6,7 @@ namespace OracleOfBatman.Graph;
 public class IssueEnrichmentService(IComicVineIssueSource issueSource, IGraphStore graphStore)
 {
 
-  public async Task<Issue> EnrichIfNeededAsync(Issue issue)
+  public async Task<Issue> EnrichIfNeededAsync(Issue issue, CancellationToken token)
   {
     if (!string.IsNullOrEmpty(issue.ImageUrl))
     {
@@ -16,7 +16,7 @@ public class IssueEnrichmentService(IComicVineIssueSource issueSource, IGraphSto
     try
     {
       // Fetch
-      var sourceIssue = await issueSource.GetIssueAsync(issue.ComicVineId);
+      var sourceIssue = await issueSource.GetIssueAsync(issue.ComicVineId, token);
 
       // update incoming issue
       issue.Name ??= sourceIssue.Name;

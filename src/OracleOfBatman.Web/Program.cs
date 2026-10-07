@@ -30,6 +30,12 @@ builder.Services.AddScoped<IGraphStore>(sp =>
 var comicVineApiKey = Environment.GetEnvironmentVariable("COMIC_VINE_API_KEY");
 if (comicVineApiKey is not null)
 {
+  // One set of limiters for the whole app, not per circuit: Comic Vine's 200/hour applies to
+  // the API key, and every visitor's session shares that one key.
+  var characterRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
+  var issueRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
+  var searchRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
+
   builder.Services.AddHttpClient();
   builder.Services.AddScoped(sp =>
   {
@@ -38,9 +44,6 @@ if (comicVineApiKey is not null)
     httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
       "OracleOfBatman/0.1 (+https://github.com/matneyx/OracleOfBatman)");
 
-    var characterRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
-    var issueRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
-    var searchRateLimiter = new ComicVineRateLimiter(200, TimeSpan.FromHours(1));
     return new ComicVineApiClient(httpClient, comicVineApiKey, characterRateLimiter, issueRateLimiter,
       searchRateLimiter);
   });
@@ -103,7 +106,8 @@ static async Task SeedBatmanIfMissingAsync(IServiceProvider services)
   var connectionCrawler = scope.ServiceProvider.GetService<ConnectionCrawler>();
   if (connectionCrawler is not null)
   {
-    await connectionCrawler.IngestCharacterAsync(batmanComicVineId);
+    var token = new CancellationTokenSource(TimeSpan.FromMinutes(30)).Token;
+    await connectionCrawler.IngestCharacterAsync(batmanComicVineId, token);
   }
 }
 

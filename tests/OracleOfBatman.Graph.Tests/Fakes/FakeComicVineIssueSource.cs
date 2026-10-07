@@ -14,7 +14,7 @@ public sealed class FakeComicVineIssueSource(
 
   public IReadOnlyList<int> FetchedIds => _fetchedIds;
 
-  public Task<ComicVineIssue> GetIssueAsync(int comicVineId)
+  public Task<ComicVineIssue> GetIssueAsync(int comicVineId, CancellationToken token)
   {
     _fetchedIds.Add(comicVineId);
 

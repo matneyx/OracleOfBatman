@@ -12,9 +12,10 @@ namespace OracleOfBatman.Web.Tests.Fakes;
 /// </summary>
 public sealed class StubGraphStore(Character? characterToReturn = null) : IGraphStore
 {
-  public Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId) => Task.FromResult(false);
+  public Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId, CancellationToken token) => Task.FromResult(false);
 
-  public Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth) =>
+  public Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth,
+    CancellationToken token) =>
     Task.FromResult<Path?>(null);
 
   public async Task RecordSeedUseAsync(int characterAComicVineId, int characterBComicVineId) => throw new NotImplementedException();

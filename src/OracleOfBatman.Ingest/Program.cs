@@ -52,7 +52,10 @@ await graphStore.EnsureSchemaAsync();
 
 var crawler = new ConnectionCrawler(comicVineSource, graphStore, issueEnrichmentService,
   trace: Console.WriteLine);
-var result = await crawler.PopulateConnectionsAsync(seedIds[0], seedIds[1], budget);
+
+var token = new CancellationTokenSource(TimeSpan.FromMinutes(30)).Token;
+
+var result = await crawler.PopulateConnectionsAsync(seedIds[0], seedIds[1], budget, token);
 
 Console.WriteLine(result.Connected
   ? $"Connected after fetching {result.CharactersFetched} new character(s) and {result.IssuesFetched} issue cast(s)."

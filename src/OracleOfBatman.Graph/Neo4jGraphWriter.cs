@@ -33,8 +33,10 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
      return true;
   }
 
-  public async Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId)
+  public async Task<bool> PathExistsAsync(int characterAComicVineId, int characterBComicVineId, CancellationToken token)
   {
+    token.ThrowIfCancellationRequested();
+
     Trace($"PathExistsAsync for character IDs {characterAComicVineId} and {characterBComicVineId}");
     await using var session = driver.AsyncSession(ConfigureSession);
     var stopwatch = Stopwatch.StartNew();
@@ -45,13 +47,14 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
       RETURN p IS NOT NULL AS pathExists
       """,
       new { aId = characterAComicVineId, bId = characterBComicVineId });
-    var record = await cursor.SingleOrDefaultAsync();
+    var record = await cursor.SingleOrDefaultAsync(token);
 
     Trace($"PathExistsAsync query took {stopwatch.Elapsed}");
     return record?["pathExists"].As<bool>() ?? false;
   }
 
-  public async Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth)
+  public async Task<Path?> FindShortestPathAsync(int characterAComicVineId, int characterBComicVineId, int maxDepth,
+    CancellationToken token)
   {
     Debug.Assert(maxDepth > 0, "maxDepth must be positive");
 
@@ -65,7 +68,7 @@ public sealed class Neo4jGraphWriter(IDriver driver, string? database = null, Ac
        ,
       new { aId = characterAComicVineId, bId = characterBComicVineId });
 
-    var record = await cursor.SingleOrDefaultAsync();
+    var record = await cursor.SingleOrDefaultAsync(token);
 
     Trace($"FindShortestPathAsync took {stopwatch.Elapsed}");
 

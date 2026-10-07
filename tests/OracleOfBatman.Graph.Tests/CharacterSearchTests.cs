@@ -11,14 +11,14 @@ public sealed class CharacterSearchTests : IAsyncLifetime
   private IDriver _driver = null!;
   private Neo4jGraphWriter _writer = null!;
 
-  public async Task InitializeAsync()
+  public async ValueTask InitializeAsync()
   {
     await _container.StartAsync();
     _driver = GraphDatabase.Driver(_container.GetConnectionString(), AuthTokens.None);
     _writer = new Neo4jGraphWriter(_driver);
   }
 
-  public async Task DisposeAsync()
+  public async ValueTask DisposeAsync()
   {
     await _driver.DisposeAsync();
     await _container.DisposeAsync();

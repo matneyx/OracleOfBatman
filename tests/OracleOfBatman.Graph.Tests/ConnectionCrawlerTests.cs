@@ -51,11 +51,60 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource([]);
     var crawler = Crawler(characterSource, graphStore);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.Equal(0, result.CharactersFetched);
     Assert.Empty(characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task Cancelled_ThrowsWithoutFetchingAnything()
+  {
+    // The caller's way to cap a crawl's wall-clock time (or abandon it when the user
+    // leaves): every visitor shares one Comic Vine allowance, so an island search mustn't
+    // keep spending it after nobody's waiting for the answer.
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", friends: [3]),
+      [SeedB] = Character(SeedB, "B")
+    };
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, new FakeGraphStore());
+    using var cancellation = new CancellationTokenSource();
+    await cancellation.CancelAsync();
+
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+      crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, cancellation.Token));
+
+    Assert.Empty(characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task CancelledMidCrawl_StopsBeforeTheNextFetch()
+  {
+    // Cancelled once both seeds are in: friend 3 is the next fetch the BFS would make, and
+    // it must never happen.
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", friends: [3]),
+      [SeedB] = Character(SeedB, "B"),
+      [3] = Character(3, "C")
+    };
+    using var cancellation = new CancellationTokenSource();
+    var characterSource = new FakeComicVineCharacterSource(characters)
+    {
+      OnFetched = id =>
+      {
+        if (id == SeedB) cancellation.Cancel();
+      }
+    };
+    var crawler = Crawler(characterSource, new FakeGraphStore());
+
+    await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+      crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, cancellation.Token));
+
+    Assert.DoesNotContain(3, characterSource.FetchedIds);
   }
 
   [Fact]
@@ -70,7 +119,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.NotNull(await graphStore.GetIssueAsync(500));
@@ -91,7 +140,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.Equal(1, result.CharactersFetched);
@@ -118,12 +167,105 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     // Only discoverable if fromB's issues are checked against fromA (not just the
     // seeds) — that's the "full accumulated set" behavior this test exists to prove.
     Assert.NotNull(await graphStore.GetIssueAsync(999));
+  }
+
+  [Fact]
+  public async Task AFailedCharacterFetch_IsSkipped_AndTheCrawlCarriesOn()
+  {
+    // Comic Vine is user-edited; one record it serves badly (XmlSerializer reports that as
+    // InvalidOperationException) mustn't sink a crawl that has other routes to try.
+    const int broken = 9;
+    const int fromA = 10;
+    const int fromB = 20;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", [broken, fromA], issues: [111]),
+      [broken] = Character(broken, "Broken"),
+      [fromA] = Character(fromA, "FromA", issues: [111, 999]),
+      [fromB] = Character(fromB, "FromB", issues: [999, 222]),
+      [SeedB] = Character(SeedB, "B", [fromB], issues: [222])
+    };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters)
+    {
+      OnFetched = id =>
+      {
+        if (id == broken) throw new InvalidOperationException("There is an error in XML document (2, 196563).");
+      }
+    };
+    var crawler = Crawler(characterSource, graphStore);
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
+
+    Assert.True(result.Connected);
+    Assert.Contains(broken, characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task AFailedSharedFriendFetch_IsSkipped_AndTheNextSharedFriendIsTried()
+  {
+    const int broken = 9;
+    const int shared = 30;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", [broken, shared], issues: [100]),
+      [SeedB] = Character(SeedB, "B", [broken, shared], issues: [200]),
+      [broken] = Character(broken, "Broken"),
+      [shared] = Character(shared, "Shared", issues: [100, 200])
+    };
+    var characterSource = new FakeComicVineCharacterSource(characters)
+    {
+      OnFetched = id =>
+      {
+        if (id == broken) throw new InvalidOperationException("There is an error in XML document (2, 196563).");
+      }
+    };
+    var crawler = Crawler(characterSource, new FakeGraphStore());
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
+
+    Assert.True(result.Connected);
+    Assert.Contains(broken, characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task AFailedStrongCandidateFetch_DuringEscalation_IsSkipped_AndTheNextCandidateIsTried()
+  {
+    // Same rule as the BFS, applied to ADR-0014's issue-cast escalation: broken is credited
+    // in both casts ahead of the real bridge, so it's the first strong candidate fetched.
+    const int broken = 9;
+    const int bridge = 30;
+    var characters = new Dictionary<int, ComicVineCharacter>
+    {
+      [SeedA] = Character(SeedA, "A", issues: [100]),
+      [SeedB] = Character(SeedB, "B", issues: [200]),
+      [broken] = Character(broken, "Broken"),
+      [bridge] = Character(bridge, "Bridge", issues: [100, 200])
+    };
+    var issues = new Dictionary<int, ComicVineIssue>
+    {
+      [100] = Issue(100, SeedA, broken, bridge),
+      [200] = Issue(200, SeedB, broken, bridge)
+    };
+    var characterSource = new FakeComicVineCharacterSource(characters)
+    {
+      OnFetched = id =>
+      {
+        if (id == broken) throw new InvalidOperationException("There is an error in XML document (2, 196563).");
+      }
+    };
+    var crawler = Crawler(characterSource, new FakeGraphStore(), new FakeComicVineIssueSource(issues));
+
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
+
+    Assert.True(result.Connected);
+    Assert.Contains(broken, characterSource.FetchedIds);
   }
 
   [Fact]
@@ -144,7 +286,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1, TestContext.Current.CancellationToken);
 
     Assert.False(result.Connected);
     Assert.Equal(1, result.CharactersFetched);
@@ -168,7 +310,7 @@ public class ConnectionCrawlerTests
 
     // A's frontier (1 friend) is smaller than B's (3 friends) — the one expansion the
     // budget allows should come from A's side.
-    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
+    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1, TestContext.Current.CancellationToken);
 
     Assert.Equal([SeedA, SeedB, 10], characterSource.FetchedIds);
   }
@@ -193,11 +335,11 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
+    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1, TestContext.Current.CancellationToken);
 
     Assert.DoesNotContain(earlierRunCharacter, characterSource.FetchedIds);
     Assert.NotNull(await graphStore.GetIssueAsync(555));
-    Assert.True(await graphStore.PathExistsAsync(fromA, earlierRunCharacter));
+    Assert.True(await graphStore.PathExistsAsync(fromA, earlierRunCharacter, TestContext.Current.CancellationToken));
   }
 
   [Fact]
@@ -222,7 +364,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
 
-    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.Single(characterSource.FetchedIds, id => id == mutualFriend);
   }
@@ -242,12 +384,12 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    var ingested = await crawler.IngestCharacterAsync(newCharacterId);
+    var ingested = await crawler.IngestCharacterAsync(newCharacterId, TestContext.Current.CancellationToken);
 
     Assert.Equal("New", ingested.Name);
     Assert.Contains(graphStore.Characters, c => c.ComicVineId == newCharacterId);
     Assert.NotNull(await graphStore.GetIssueAsync(700));
-    Assert.True(await graphStore.PathExistsAsync(newCharacterId, alreadyKnownId));
+    Assert.True(await graphStore.PathExistsAsync(newCharacterId, alreadyKnownId, TestContext.Current.CancellationToken));
   }
 
   [Fact]
@@ -260,7 +402,7 @@ public class ConnectionCrawlerTests
     Character? addedCharacter = null;
     crawler.CharacterAdded += c => addedCharacter = (Character?)c;
 
-    await crawler.IngestCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42, TestContext.Current.CancellationToken);
 
     Assert.NotNull(addedCharacter);
     Assert.Equal(42, addedCharacter.ComicVineId);
@@ -279,7 +421,7 @@ public class ConnectionCrawlerTests
     var raised = false;
     crawler.CharacterAdded += _ => raised = true;
 
-    await crawler.IngestCharacterAsync(existingId);
+    await crawler.IngestCharacterAsync(existingId, TestContext.Current.CancellationToken);
 
     Assert.False(raised);
   }
@@ -297,7 +439,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore);
 
-    await crawler.IngestCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42, TestContext.Current.CancellationToken);
 
     var found = await graphStore.GetCharacterAsync(42);
     Assert.Equal([10, 20], found!.FriendIds);
@@ -313,7 +455,7 @@ public class ConnectionCrawlerTests
     var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
     var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
 
-    await crawler.IngestCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42, TestContext.Current.CancellationToken);
 
     var found = await graphStore.GetCharacterAsync(42);
     Assert.Equal(new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc), found!.IngestionDateTime);
@@ -329,13 +471,87 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero));
     var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
-    await crawler.IngestCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42, TestContext.Current.CancellationToken);
 
     timeProvider.SetUtcNow(new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero));
-    await crawler.IngestCharacterAsync(42);
+    await crawler.IngestCharacterAsync(42, TestContext.Current.CancellationToken);
 
     var found = await graphStore.GetCharacterAsync(42);
     Assert.Equal(new DateTime(2026, 8, 11, 9, 0, 0, DateTimeKind.Utc), found!.IngestionDateTime);
+  }
+
+  [Fact]
+  public async Task RefreshIfStaleAsync_ReIngestsACharacterLastIngestedOverAnHourAgo()
+  {
+    // Using a Character in a pairing refreshes it in full: Comic Vine is user-edited, so an
+    // issue credit can appear at any time — and the fresh timestamp also lets the
+    // oldest-first half of Random rotate past it.
+    const int newIssue = 500;
+    const int alreadyCreditedThere = 7;
+    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "Stale", issues: [newIssue]) };
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(42, "Stale",
+      ingestionDateTime: new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc)));
+    await graphStore.UpsertCharacterAsync(new Character(alreadyCreditedThere, "Other"));
+    await graphStore.UpsertCreditedInAsync(alreadyCreditedThere, [new Issue(newIssue, "New Issue")]);
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 13, 30, 0, TimeSpan.Zero));
+    var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
+
+    await crawler.RefreshIfStaleAsync(42, TestContext.Current.CancellationToken);
+
+    Assert.Equal([42], characterSource.FetchedIds);
+    var found = await graphStore.GetCharacterAsync(42);
+    Assert.Equal(new DateTime(2026, 8, 10, 13, 30, 0, DateTimeKind.Utc), found!.IngestionDateTime);
+    Assert.True(await graphStore.PathExistsAsync(42, alreadyCreditedThere, TestContext.Current.CancellationToken));
+  }
+
+  [Fact]
+  public async Task RefreshIfStaleAsync_SkipsACharacterIngestedWithinTheLastHour()
+  {
+    // At most one Comic Vine fetch per Character per hour, however often it's paired.
+    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "Fresh") };
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(42, "Fresh",
+      ingestionDateTime: new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Utc)));
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 10, 12, 59, 0, TimeSpan.Zero));
+    var crawler = Crawler(characterSource, graphStore, timeProvider: timeProvider);
+
+    await crawler.RefreshIfStaleAsync(42, TestContext.Current.CancellationToken);
+
+    Assert.Empty(characterSource.FetchedIds);
+  }
+
+  [Fact]
+  public async Task RefreshIfStaleAsync_IngestsACharacterNotInTheGraphAtAll()
+  {
+    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "Brand New") };
+    var graphStore = new FakeGraphStore();
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, graphStore);
+
+    await crawler.RefreshIfStaleAsync(42, TestContext.Current.CancellationToken);
+
+    Assert.Equal([42], characterSource.FetchedIds);
+    Assert.NotNull(await graphStore.GetCharacterAsync(42));
+  }
+
+  [Fact]
+  public async Task RefreshIfStaleAsync_ReIngestsACharacterThatWasNeverIngested()
+  {
+    // A Character can exist in the graph without ever being fetched itself — e.g. persisted
+    // as a stub, or written before IngestionDateTime existed. No timestamp means we've never
+    // had its real data: the stalest case there is, not a fresh one.
+    var characters = new Dictionary<int, ComicVineCharacter> { [42] = Character(42, "Never Fetched") };
+    var graphStore = new FakeGraphStore();
+    await graphStore.UpsertCharacterAsync(new Character(42, "Never Fetched"));
+    var characterSource = new FakeComicVineCharacterSource(characters);
+    var crawler = Crawler(characterSource, graphStore);
+
+    await crawler.RefreshIfStaleAsync(42, TestContext.Current.CancellationToken);
+
+    Assert.Equal([42], characterSource.FetchedIds);
   }
 
   [Fact]
@@ -450,7 +666,7 @@ public class ConnectionCrawlerTests
     var issueSource = new FakeComicVineIssueSource(issues);
     var crawler = Crawler(characterSource, graphStore, issueSource);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.Equal([SeedA, SeedB, bridge], characterSource.FetchedIds);
@@ -477,7 +693,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.False(result.Connected);
     Assert.Equal([SeedA, SeedB], characterSource.FetchedIds);
@@ -503,7 +719,7 @@ public class ConnectionCrawlerTests
     var issueSource = new FakeComicVineIssueSource([]);
     var crawler = Crawler(characterSource, graphStore, issueSource);
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.Empty(issueSource.FetchedIds);
@@ -533,7 +749,7 @@ public class ConnectionCrawlerTests
 
     // Only enough budget for one cast fetch — never enough to see the bridge in two of
     // them, let alone ingest it.
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 1, TestContext.Current.CancellationToken);
 
     Assert.False(result.Connected);
     Assert.Equal(1, result.IssuesFetched);
@@ -569,7 +785,7 @@ public class ConnectionCrawlerTests
     var characterSource = new FakeComicVineCharacterSource(characters);
     var crawler = Crawler(characterSource, graphStore, new FakeComicVineIssueSource(issues));
 
-    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10);
+    var result = await crawler.PopulateConnectionsAsync(SeedA, SeedB, 10, TestContext.Current.CancellationToken);
 
     Assert.True(result.Connected);
     Assert.Contains(secondBridge, characterSource.FetchedIds);

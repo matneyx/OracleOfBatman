@@ -196,8 +196,14 @@ connected pair never re-ingests on Go, so the same stale characters kept
 resurfacing. The button now alternates per circuit: oldest-ingested, then a
 genuinely random pick (`IGraphStore.GetRandomCharacterAsync`), and so on.
 Both modes share the exclusion rules above. Refreshing `ingestion_date` on
-selection was reconsidered and still rejected: the date means data
-freshness, and stamping it without a fetch would hide stale data.
+selection alone stays rejected: the date means data freshness, and stamping
+it without a fetch would hide stale data. Instead, **Go fully re-ingests
+both seeds from Comic Vine** (`ConnectionCrawler.RefreshIfStaleAsync`), at
+most once per Character per hour; never-ingested Characters always count as
+stale. Comic Vine is user-edited, so a new issue credit can appear at any
+time, and the refresh is also what rotates a used Character out of the
+oldest-first half of Random. The refresh only adds credits; ones removed on
+Comic Vine are not deleted here.
 
 ## Feedback: `CharacterAdded` stays, `IssueConnectionConfirmed` moves to Go-click time
 
